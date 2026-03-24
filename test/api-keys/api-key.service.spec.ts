@@ -2,10 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiKeyService } from '../../src/api-keys/api-key.service';
+import { ApiKeyAnalyticsService } from '../../src/api-keys/api-key-analytics.service';
 import { PrismaService } from '../../src/database/prisma/prisma.service';
 import { RedisService } from '../../src/common/services/redis.service';
 import { CreateApiKeyDto } from '../../src/api-keys/dto/create-api-key.dto';
 import { UpdateApiKeyDto } from '../../src/api-keys/dto/update-api-key.dto';
+import { ApiKeyResponseDto } from '../../src/api-keys/dto/api-key-response.dto';
 import { ApiKeyScope } from '../../src/api-keys/enums/api-key-scope.enum';
 
 import { PaginationService } from '../../src/common/pagination/pagination.service';
@@ -14,6 +16,7 @@ describe('ApiKeyService', () => {
   let prismaService: PrismaService;
   let redisService: RedisService;
   let configService: ConfigService;
+  let analyticsService: ApiKeyAnalyticsService;
 
   const mockPrismaService = {
     apiKey: {
@@ -35,12 +38,21 @@ describe('ApiKeyService', () => {
 
   const mockConfigService = {
     get: jest.fn((key: string) => {
-      const config = {
+      const config: Record<string, number | string> = {
         ENCRYPTION_KEY: 'test-encryption-key-32-characters',
         API_KEY_RATE_LIMIT_PER_MINUTE: 60,
+        API_KEY_ROTATION_DAYS: 90,
+        API_KEY_ROTATION_WARNING_DAYS: 7,
       };
       return config[key];
     }),
+  };
+
+  const mockAnalyticsService = {
+    logUsage: jest.fn(),
+    getUsageReport: jest.fn(),
+    getAnalyticsSummary: jest.fn(),
+    cleanupOldLogs: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -51,6 +63,7 @@ describe('ApiKeyService', () => {
         { provide: RedisService, useValue: mockRedisService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: PaginationService, useValue: {} },
+        { provide: ApiKeyAnalyticsService, useValue: mockAnalyticsService },
       ],
     }).compile();
 
@@ -58,6 +71,7 @@ describe('ApiKeyService', () => {
     prismaService = module.get<PrismaService>(PrismaService);
     redisService = module.get<RedisService>(RedisService);
     configService = module.get<ConfigService>(ConfigService);
+    analyticsService = module.get<ApiKeyAnalyticsService>(ApiKeyAnalyticsService);
 
     jest.clearAllMocks();
   });
@@ -130,7 +144,7 @@ describe('ApiKeyService', () => {
 
       mockPrismaService.apiKey.findMany.mockResolvedValue(mockApiKeys);
 
-      const result = await service.findAll();
+      const result = (await service.findAll()) as ApiKeyResponseDto[];
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('Test API Key 1');
@@ -279,6 +293,213 @@ describe('ApiKeyService', () => {
       mockRedisService.get.mockResolvedValue('60');
 
       await expect(service.validateApiKey('propchain_live_abc123xyz')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // ==================== ROTATION TESTS ====================
+
+  describe('rotateKey', () => {
+    it('should rotate an API key successfully', async () => {
+      const mockApiKey = {
+        id: 'test-id',
+        name: 'Test API Key',
+        key: 'encrypted-old-key',
+        keyPrefix: 'propchain_live_oldprefix',
+        keyVersion: 1,
+        scopes: [ApiKeyScope.READ_PROPERTIES],
+        requestCount: BigInt(5),
+        lastUsedAt: new Date(),
+        isActive: true,
+        rateLimit: 60,
+        lastRotatedAt: new Date('2026-01-01'),
+        rotationDueAt: new Date('2026-03-24'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updatedApiKey = {
+        ...mockApiKey,
+        keyVersion: 2,
+        lastRotatedAt: new Date(),
+      };
+
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(mockApiKey);
+      mockPrismaService.apiKey.update.mockResolvedValue(updatedApiKey);
+      mockRedisService.del.mockResolvedValue(1);
+
+      const result = await service.rotateKey('test-id');
+
+      expect(result.id).toBe('test-id');
+      expect(result.name).toBe('Test API Key');
+      expect(result.oldKeyPrefix).toBe('propchain_live_oldprefix');
+      expect(result.key).toMatch(/^propchain_live_/);
+      expect(mockRedisService.del).toHaveBeenCalledWith('rate_limit:propchain_live_oldprefix');
+    });
+
+    it('should throw NotFoundException if API key not found', async () => {
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(null);
+
+      await expect(service.rotateKey('non-existent-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if API key is revoked', async () => {
+      const mockApiKey = {
+        id: 'test-id',
+        name: 'Test API Key',
+        key: 'encrypted-key',
+        keyPrefix: 'propchain_live_abc123',
+        isActive: false,
+      };
+
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(mockApiKey);
+
+      await expect(service.rotateKey('test-id')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getRotationStatus', () => {
+    it('should return rotation status for an API key', async () => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 30);
+
+      const mockApiKey = {
+        id: 'test-id',
+        name: 'Test API Key',
+        keyPrefix: 'propchain_live_abc123',
+        lastRotatedAt: new Date('2026-01-01'),
+        rotationDueAt: futureDate,
+        isActive: true,
+      };
+
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(mockApiKey);
+
+      const result = await service.getRotationStatus('test-id');
+
+      expect(result.id).toBe('test-id');
+      expect(result.requiresRotation).toBe(false);
+      expect(result.daysUntilRotation).toBeGreaterThan(0);
+    });
+
+    it('should return requiresRotation true for expired key', async () => {
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 10);
+
+      const mockApiKey = {
+        id: 'test-id',
+        name: 'Test API Key',
+        keyPrefix: 'propchain_live_abc123',
+        lastRotatedAt: new Date('2025-12-01'),
+        rotationDueAt: pastDate,
+        isActive: true,
+      };
+
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(mockApiKey);
+
+      const result = await service.getRotationStatus('test-id');
+
+      expect(result.requiresRotation).toBe(true);
+      expect(result.daysUntilRotation).toBeLessThanOrEqual(0);
+    });
+
+    it('should throw NotFoundException if API key not found', async () => {
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(null);
+
+      await expect(service.getRotationStatus('non-existent-id')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getKeysRequiringRotation', () => {
+    it('should return keys that have passed rotation due date', async () => {
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 10);
+
+      const mockApiKeys = [
+        {
+          id: 'test-id-1',
+          name: 'Expired Key 1',
+          keyPrefix: 'propchain_live_expired1',
+          lastRotatedAt: new Date('2025-12-01'),
+          rotationDueAt: pastDate,
+          isActive: true,
+        },
+      ];
+
+      mockPrismaService.apiKey.findMany.mockResolvedValue(mockApiKeys);
+
+      const result = await service.getKeysRequiringRotation();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].requiresRotation).toBe(true);
+    });
+  });
+
+  describe('getKeysApproachingRotation', () => {
+    it('should return keys within warning period', async () => {
+      const nearFutureDate = new Date();
+      nearFutureDate.setDate(nearFutureDate.getDate() + 5);
+
+      const mockApiKeys = [
+        {
+          id: 'test-id-1',
+          name: 'Approaching Key',
+          keyPrefix: 'propchain_live_approaching',
+          lastRotatedAt: new Date('2026-01-01'),
+          rotationDueAt: nearFutureDate,
+          isActive: true,
+        },
+      ];
+
+      mockPrismaService.apiKey.findMany.mockResolvedValue(mockApiKeys);
+
+      const result = await service.getKeysApproachingRotation();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].requiresRotation).toBe(false);
+    });
+  });
+
+  describe('getUsageAnalytics', () => {
+    it('should return usage analytics for an API key', async () => {
+      const mockApiKey = {
+        id: 'test-id',
+        name: 'Test API Key',
+        keyPrefix: 'propchain_live_abc123',
+      };
+
+      const mockReport = {
+        apiKeyId: 'test-id',
+        apiKeyName: 'Test API Key',
+        period: { start: new Date('2026-01-01'), end: new Date('2026-01-31') },
+        summary: {
+          totalRequests: 100,
+          uniqueEndpoints: 5,
+          averageResponseTime: 150,
+          errorRate: 2,
+          topEndpoints: [],
+          requestsByDay: [],
+          requestsByHour: [],
+        },
+      };
+
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(mockApiKey);
+      mockAnalyticsService.getUsageReport.mockResolvedValue(mockReport);
+
+      const result = await service.getUsageAnalytics(
+        'test-id',
+        new Date('2026-01-01'),
+        new Date('2026-01-31'),
+      );
+
+      expect(result.apiKeyId).toBe('test-id');
+      expect(result.summary.totalRequests).toBe(100);
+    });
+
+    it('should throw NotFoundException if API key not found', async () => {
+      mockPrismaService.apiKey.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getUsageAnalytics('non-existent-id', new Date(), new Date()),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

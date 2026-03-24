@@ -25,6 +25,12 @@ export class ApiKeyResponseDto {
   @ApiProperty({ example: 100, nullable: true })
   rateLimit: number | null;
 
+  @ApiProperty({ example: '2026-01-15T08:00:00.000Z', nullable: true })
+  lastRotatedAt?: Date;
+
+  @ApiProperty({ example: '2026-04-15T08:00:00.000Z', nullable: true })
+  rotationDueAt?: Date;
+
   @ApiProperty({ example: '2026-01-15T08:00:00.000Z' })
   createdAt: Date;
 

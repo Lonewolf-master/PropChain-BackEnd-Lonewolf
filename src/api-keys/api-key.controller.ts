@@ -11,8 +11,8 @@ import {
   HttpStatus,
   Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
-import { ApiKeyService } from './api-key.service';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiKeyService, RotationStatus, RotationResult } from './api-key.service';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateApiKeyDto } from './dto/update-api-key.dto';
 import { ApiKeyResponseDto, CreateApiKeyResponseDto } from './dto/api-key-response.dto';
@@ -124,5 +124,92 @@ export class ApiKeyController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async revoke(@Param('id') id: string): Promise<void> {
     return this.apiKeyService.revoke(id);
+  }
+
+  // ==================== ROTATION ENDPOINTS ====================
+
+  @Post(':id/rotate')
+  @ApiOperation({
+    summary: 'Rotate API key',
+    description: 'Generate a new API key and deactivate the old one. The new key is shown only once.',
+  })
+  @ApiParam({ name: 'id', description: 'API key ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'API key rotated successfully',
+  })
+  @ApiResponse({ status: 404, description: 'API key not found' })
+  @ApiResponse({ status: 400, description: 'Cannot rotate a revoked API key' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async rotateKey(@Param('id') id: string): Promise<RotationResult> {
+    return this.apiKeyService.rotateKey(id);
+  }
+
+  @Get(':id/rotation-status')
+  @ApiOperation({
+    summary: 'Get rotation status',
+    description: 'Check if an API key requires rotation and when it was last rotated',
+  })
+  @ApiParam({ name: 'id', description: 'API key ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Rotation status retrieved successfully',
+  })
+  @ApiResponse({ status: 404, description: 'API key not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getRotationStatus(@Param('id') id: string): Promise<RotationStatus> {
+    return this.apiKeyService.getRotationStatus(id);
+  }
+
+  @Get('rotation/required')
+  @ApiOperation({
+    summary: 'Get keys requiring rotation',
+    description: 'List all API keys that have passed their rotation due date',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of API keys requiring rotation',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getKeysRequiringRotation(): Promise<RotationStatus[]> {
+    return this.apiKeyService.getKeysRequiringRotation();
+  }
+
+  @Get('rotation/approaching')
+  @ApiOperation({
+    summary: 'Get keys approaching rotation',
+    description: 'List all API keys that will require rotation within the warning period',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of API keys approaching rotation',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getKeysApproachingRotation(): Promise<RotationStatus[]> {
+    return this.apiKeyService.getKeysApproachingRotation();
+  }
+
+  // ==================== ANALYTICS ENDPOINTS ====================
+
+  @Get(':id/analytics')
+  @ApiOperation({
+    summary: 'Get API key usage analytics',
+    description: 'Retrieve detailed usage analytics for a specific API key',
+  })
+  @ApiParam({ name: 'id', description: 'API key ID' })
+  @ApiQuery({ name: 'startDate', description: 'Start date (ISO 8601)', example: '2026-01-01T00:00:00Z' })
+  @ApiQuery({ name: 'endDate', description: 'End date (ISO 8601)', example: '2026-01-31T23:59:59Z' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usage analytics retrieved successfully',
+  })
+  @ApiResponse({ status: 404, description: 'API key not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getUsageAnalytics(
+    @Param('id') id: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.apiKeyService.getUsageAnalytics(id, new Date(startDate), new Date(endDate));
   }
 }

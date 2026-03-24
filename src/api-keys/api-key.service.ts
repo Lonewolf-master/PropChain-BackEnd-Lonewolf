@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { RedisService } from '../common/services/redis.service';
@@ -7,22 +7,48 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateApiKeyDto } from './dto/update-api-key.dto';
 import { ApiKeyResponseDto, CreateApiKeyResponseDto } from './dto/api-key-response.dto';
 import { API_KEY_SCOPES, ApiKeyScope } from './enums/api-key-scope.enum';
+import { ApiKeyAnalyticsService, UsageLogEntry } from './api-key-analytics.service';
 import * as crypto from 'crypto';
 import * as CryptoJS from 'crypto-js';
+
+export interface RotationResult {
+  id: string;
+  name: string;
+  oldKeyPrefix: string;
+  newKeyPrefix: string;
+  key: string; // New plain key (shown only once)
+  rotatedAt: Date;
+}
+
+export interface RotationStatus {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  lastRotatedAt?: Date;
+  rotationDueAt?: Date;
+  daysUntilRotation?: number;
+  requiresRotation: boolean;
+}
 
 @Injectable()
 export class ApiKeyService {
   private readonly encryptionKey: string;
   private readonly globalRateLimit: number;
+  private readonly rotationIntervalDays: number;
+  private readonly rotationWarningDays: number;
+  private readonly logger = new Logger(ApiKeyService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly configService: ConfigService,
     private readonly paginationService: PaginationService,
+    private readonly analyticsService: ApiKeyAnalyticsService,
   ) {
     this.encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
     this.globalRateLimit = this.configService.get<number>('API_KEY_RATE_LIMIT_PER_MINUTE', 60);
+    this.rotationIntervalDays = this.configService.get<number>('API_KEY_ROTATION_DAYS', 90);
+    this.rotationWarningDays = this.configService.get<number>('API_KEY_ROTATION_WARNING_DAYS', 7);
 
     if (!this.encryptionKey) {
       throw new Error('ENCRYPTION_KEY must be set in environment variables');
@@ -36,6 +62,10 @@ export class ApiKeyService {
     const keyPrefix = this.extractKeyPrefix(plainKey);
     const encryptedKey = this.encryptKey(plainKey);
 
+    // Set rotation due date
+    const rotationDueAt = new Date();
+    rotationDueAt.setDate(rotationDueAt.getDate() + this.rotationIntervalDays);
+
     const apiKey = await this.prisma.apiKey.create({
       data: {
         name: createApiKeyDto.name,
@@ -43,6 +73,8 @@ export class ApiKeyService {
         keyPrefix,
         scopes: createApiKeyDto.scopes,
         rateLimit: createApiKeyDto.rateLimit,
+        rotationDueAt,
+        lastRotatedAt: new Date(),
       },
     });
 
@@ -253,8 +285,212 @@ export class ApiKeyService {
       lastUsedAt: apiKey.lastUsedAt,
       isActive: apiKey.isActive,
       rateLimit: apiKey.rateLimit,
+      lastRotatedAt: apiKey.lastRotatedAt,
+      rotationDueAt: apiKey.rotationDueAt,
       createdAt: apiKey.createdAt,
       updatedAt: apiKey.updatedAt,
     };
+  }
+
+  // ==================== KEY ROTATION METHODS ====================
+
+  /**
+   * Rotate an API key - generates a new key and deactivates the old one
+   */
+  async rotateKey(id: string): Promise<RotationResult> {
+    const apiKey = await this.prisma.apiKey.findUnique({
+      where: { id },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException(`API key with ID ${id} not found`);
+    }
+
+    if (!apiKey.isActive) {
+      throw new BadRequestException('Cannot rotate a revoked API key');
+    }
+
+    // Generate new key
+    const newPlainKey = this.generateApiKey();
+    const newKeyPrefix = this.extractKeyPrefix(newPlainKey);
+    const newEncryptedKey = this.encryptKey(newPlainKey);
+
+    // Calculate new rotation due date
+    const newRotationDueAt = new Date();
+    newRotationDueAt.setDate(newRotationDueAt.getDate() + this.rotationIntervalDays);
+
+    // Update the API key with new values
+    const updatedKey = await this.prisma.apiKey.update({
+      where: { id },
+      data: {
+        key: newEncryptedKey,
+        keyPrefix: newKeyPrefix,
+        keyVersion: { increment: 1 },
+        lastRotatedAt: new Date(),
+        rotationDueAt: newRotationDueAt,
+      },
+    });
+
+    // Clear the old rate limit cache
+    await this.redis.del(`rate_limit:${apiKey.keyPrefix}`);
+
+    this.logger.log(`Rotated API key ${id}: ${apiKey.keyPrefix} -> ${newKeyPrefix}`);
+
+    return {
+      id: updatedKey.id,
+      name: updatedKey.name,
+      oldKeyPrefix: apiKey.keyPrefix,
+      newKeyPrefix,
+      key: newPlainKey,
+      rotatedAt: updatedKey.lastRotatedAt!,
+    };
+  }
+
+  /**
+   * Get rotation status for an API key
+   */
+  async getRotationStatus(id: string): Promise<RotationStatus> {
+    const apiKey = await this.prisma.apiKey.findUnique({
+      where: { id },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException(`API key with ID ${id} not found`);
+    }
+
+    const now = new Date();
+    const rotationDueAt = apiKey.rotationDueAt;
+    const daysUntilRotation = rotationDueAt
+      ? Math.ceil((rotationDueAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      : undefined;
+
+    return {
+      id: apiKey.id,
+      name: apiKey.name,
+      keyPrefix: apiKey.keyPrefix,
+      lastRotatedAt: apiKey.lastRotatedAt || undefined,
+      rotationDueAt: rotationDueAt || undefined,
+      daysUntilRotation,
+      requiresRotation: daysUntilRotation !== undefined && daysUntilRotation <= 0,
+    };
+  }
+
+  /**
+   * Get all API keys that require rotation
+   */
+  async getKeysRequiringRotation(): Promise<RotationStatus[]> {
+    const now = new Date();
+
+    const keys = await this.prisma.apiKey.findMany({
+      where: {
+        isActive: true,
+        rotationDueAt: { lte: now },
+      },
+    });
+
+    return keys.map(apiKey => ({
+      id: apiKey.id,
+      name: apiKey.name,
+      keyPrefix: apiKey.keyPrefix,
+      lastRotatedAt: apiKey.lastRotatedAt || undefined,
+      rotationDueAt: apiKey.rotationDueAt || undefined,
+      daysUntilRotation: 0,
+      requiresRotation: true,
+    }));
+  }
+
+  /**
+   * Get API keys approaching rotation (within warning period)
+   */
+  async getKeysApproachingRotation(): Promise<RotationStatus[]> {
+    const now = new Date();
+    const warningDate = new Date();
+    warningDate.setDate(warningDate.getDate() + this.rotationWarningDays);
+
+    const keys = await this.prisma.apiKey.findMany({
+      where: {
+        isActive: true,
+        rotationDueAt: {
+          gt: now,
+          lte: warningDate,
+        },
+      },
+    });
+
+    return keys.map(apiKey => {
+      const daysUntilRotation = apiKey.rotationDueAt
+        ? Math.ceil((apiKey.rotationDueAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      return {
+        id: apiKey.id,
+        name: apiKey.name,
+        keyPrefix: apiKey.keyPrefix,
+        lastRotatedAt: apiKey.lastRotatedAt || undefined,
+        rotationDueAt: apiKey.rotationDueAt || undefined,
+        daysUntilRotation,
+        requiresRotation: false,
+      };
+    });
+  }
+
+  /**
+   * Automatic rotation for all expired keys (called by scheduler)
+   */
+  async autoRotateExpiredKeys(): Promise<RotationResult[]> {
+    const expiredKeys = await this.getKeysRequiringRotation();
+    const results: RotationResult[] = [];
+
+    for (const key of expiredKeys) {
+      try {
+        const result = await this.rotateKey(key.id);
+        results.push(result);
+        this.logger.log(`Auto-rotated API key: ${key.name} (${key.id})`);
+      } catch (error) {
+        this.logger.error(`Failed to auto-rotate API key ${key.id}: ${error.message}`);
+      }
+    }
+
+    return results;
+  }
+
+  // ==================== USAGE ANALYTICS INTEGRATION ====================
+
+  /**
+   * Log detailed usage for analytics
+   */
+  async logDetailedUsage(
+    apiKeyId: string,
+    endpoint: string,
+    method: string,
+    statusCode: number,
+    responseTime: number,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.analyticsService.logUsage({
+      apiKeyId,
+      endpoint,
+      method,
+      statusCode,
+      responseTime,
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  /**
+   * Get usage analytics for an API key
+   */
+  async getUsageAnalytics(id: string, startDate: Date, endDate: Date) {
+    const apiKey = await this.prisma.apiKey.findUnique({
+      where: { id },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException(`API key with ID ${id} not found`);
+    }
+
+    return this.analyticsService.getUsageReport(id, startDate, endDate);
   }
 }
