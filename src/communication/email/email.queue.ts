@@ -446,11 +446,7 @@ export class EmailQueueService implements OnModuleDestroy {
    * Set up queue event listeners
    */
   private setupEventListeners(): void {
-    const registerListener = (
-      queue: Bull.Queue,
-      event: string,
-      handler: (...args: any[]) => void,
-    ) => {
+    const registerListener = (queue: Bull.Queue, event: string, handler: (...args: any[]) => void) => {
       queue.on(event, handler);
       this.listenerDisposers.push(() => queue.removeListener(event, handler));
     };
@@ -523,20 +519,23 @@ export class EmailQueueService implements OnModuleDestroy {
   }
 
   private startQueueCleanupMonitoring(): void {
-    this.queueCleanupMonitor = setInterval(async () => {
-      try {
-        await Promise.all([
-          this.emailQueue.clean(24 * 60 * 60 * 1000, 'completed'),
-          this.emailQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
-          this.priorityQueue.clean(24 * 60 * 60 * 1000, 'completed'),
-          this.priorityQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
-          this.batchQueue.clean(24 * 60 * 60 * 1000, 'completed'),
-          this.batchQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
-        ]);
-      } catch (error) {
-        this.logger.error('Failed to clean queue history', error);
-      }
-    }, this.configService.get<number>('EMAIL_QUEUE_CLEANUP_INTERVAL_MS', 300000));
+    this.queueCleanupMonitor = setInterval(
+      async () => {
+        try {
+          await Promise.all([
+            this.emailQueue.clean(24 * 60 * 60 * 1000, 'completed'),
+            this.emailQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
+            this.priorityQueue.clean(24 * 60 * 60 * 1000, 'completed'),
+            this.priorityQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
+            this.batchQueue.clean(24 * 60 * 60 * 1000, 'completed'),
+            this.batchQueue.clean(7 * 24 * 60 * 60 * 1000, 'failed'),
+          ]);
+        } catch (error) {
+          this.logger.error('Failed to clean queue history', error);
+        }
+      },
+      this.configService.get<number>('EMAIL_QUEUE_CLEANUP_INTERVAL_MS', 300000),
+    );
     this.queueCleanupMonitor.unref?.();
   }
 
@@ -573,7 +572,9 @@ export class EmailQueueService implements OnModuleDestroy {
         delete job.data.text;
       }
     } catch (error) {
-      this.logger.warn(`Failed to cleanup job resources for ${job?.id}: ${error instanceof Error ? error.message : error}`);
+      this.logger.warn(
+        `Failed to cleanup job resources for ${job?.id}: ${error instanceof Error ? error.message : error}`,
+      );
     }
   }
 

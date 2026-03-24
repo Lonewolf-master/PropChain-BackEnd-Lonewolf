@@ -486,7 +486,8 @@ export class UserService {
 
     return this.cacheService.wrap(
       `user:followers:${userId}:${limit}`,
-      () => this.monitorQuery('users.getFollowers', { userId, limit }, () => this.prisma.userRelationship.findMany(query)),
+      () =>
+        this.monitorQuery('users.getFollowers', { userId, limit }, () => this.prisma.userRelationship.findMany(query)),
       { l1Ttl: 30, l2Ttl: 120, tags: ['user', `user:${userId}`] },
     );
   }
@@ -520,7 +521,8 @@ export class UserService {
 
     return this.cacheService.wrap(
       `user:following:${userId}:${limit}`,
-      () => this.monitorQuery('users.getFollowing', { userId, limit }, () => this.prisma.userRelationship.findMany(query)),
+      () =>
+        this.monitorQuery('users.getFollowing', { userId, limit }, () => this.prisma.userRelationship.findMany(query)),
       { l1Ttl: 30, l2Ttl: 120, tags: ['user', `user:${userId}`] },
     );
   }

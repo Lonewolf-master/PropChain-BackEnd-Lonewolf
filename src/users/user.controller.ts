@@ -1,13 +1,11 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-
 import {
-  ApiResponse,
   ApiTags,
   ApiOperation,
-  ApiBody,
+  ApiResponse,
+  ApiBearerAuth,
   ApiParam,
   ApiExtraModels,
   ApiOkResponse,
@@ -15,15 +13,13 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiCreatedResponse,
-  ApiBearerAuth,
-  ApiDeprecated,
+  ApiBody,
   ApiQuery,
   ApiConsumes,
   ApiProduces,
   ApiProperty,
   ApiPropertyOptional,
   ApiResponseOptions,
-  ApiVersion,
 } from '@nestjs/swagger';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -42,15 +38,11 @@ export class UserController {
   @ApiCreatedResponse({
     description: 'User created successfully.',
     type: UserResponseDto,
-    examples: {
-      success: {
-        value: {
-          id: 'user_abc123',
-          email: 'john.doe@example.com',
-          firstName: 'John',
-          lastName: 'Doe',
-          isEmailVerified: false,
-        },
+    schema: {
+      example: {
+        id: 'user_abc123',
+        email: 'john.doe@example.com',
+        isEmailVerified: false,
       },
     },
   })

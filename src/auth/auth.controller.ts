@@ -102,10 +102,13 @@ export class AuthController {
   @ApiStandardErrorResponse([400, 401])
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto, @Req() req: Request) {
-    return this.authService.login({
-      email: loginDto.email,
-      password: loginDto.password,
-    }, this.getRequestMeta(req));
+    return this.authService.login(
+      {
+        email: loginDto.email,
+        password: loginDto.password,
+      },
+      this.getRequestMeta(req),
+    );
   }
 
   /**
@@ -137,10 +140,13 @@ export class AuthController {
   @ApiStandardErrorResponse([401])
   @HttpCode(HttpStatus.OK)
   async web3Login(@Body() loginDto: LoginWeb3Dto, @Req() req: Request) {
-    return this.authService.login({
-      walletAddress: loginDto.walletAddress,
-      signature: loginDto.signature,
-    }, this.getRequestMeta(req));
+    return this.authService.login(
+      {
+        walletAddress: loginDto.walletAddress,
+        signature: loginDto.signature,
+      },
+      this.getRequestMeta(req),
+    );
   }
 
   /**

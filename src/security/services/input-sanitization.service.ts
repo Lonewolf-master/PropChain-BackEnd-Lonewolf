@@ -76,7 +76,6 @@ export class InputSanitizationService {
     if (this.matchesPattern(value, SQL_INJECTION_PATTERNS)) {
       throw new BadRequestException(`Potential SQL injection detected in ${path}`);
     }
-
   }
 
   private containsIllegalControlCharacters(value: string): boolean {
