@@ -397,7 +397,9 @@ export class FeatureFlagService {
   }
 
   private evaluateConditions(conditions: FlagCondition[], context: FlagEvaluationContext): boolean {
-    if (conditions.length === 0) return false;
+    if (conditions.length === 0) {
+      return false;
+    }
 
     return conditions.every(condition => {
       const fieldValue = this.getFieldValue(condition.field, context);
@@ -498,22 +500,32 @@ export class FeatureFlagService {
   }
 
   private matchesFilters(flag: FeatureFlag, query?: FlagQueryDto): boolean {
-    if (!query) return true;
+    if (!query) {
+      return true;
+    }
 
     const { keys, status, type, tags, search } = query;
 
     if (keys) {
       const keyList = keys.split(',').map(k => k.trim());
-      if (!keyList.includes(flag.key)) return false;
+      if (!keyList.includes(flag.key)) {
+        return false;
+      }
     }
 
-    if (status && flag.status !== status) return false;
-    if (type && flag.type !== type) return false;
+    if (status && flag.status !== status) {
+      return false;
+    }
+    if (type && flag.type !== type) {
+      return false;
+    }
 
     if (tags) {
       const tagList = tags.split(',').map(t => t.trim());
       const hasMatchingTag = tagList.some(tag => flag.tags.includes(tag));
-      if (!hasMatchingTag) return false;
+      if (!hasMatchingTag) {
+        return false;
+      }
     }
 
     if (search) {
@@ -521,14 +533,18 @@ export class FeatureFlagService {
       const nameMatch = flag.name.toLowerCase().includes(searchLower);
       const descMatch = flag.description.toLowerCase().includes(searchLower);
       const keyMatch = flag.key.toLowerCase().includes(searchLower);
-      if (!nameMatch && !descMatch && !keyMatch) return false;
+      if (!nameMatch && !descMatch && !keyMatch) {
+        return false;
+      }
     }
 
     return true;
   }
 
   private serializeQuery(query?: FlagQueryDto): string {
-    if (!query) return '';
+    if (!query) {
+      return '';
+    }
 
     const filtered = Object.entries(query)
       .filter(([_, value]) => value !== undefined && value !== null)

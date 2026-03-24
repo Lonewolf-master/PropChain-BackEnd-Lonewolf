@@ -26,10 +26,13 @@ export class FeatureFlagHelperService {
    */
   async areEnabled(flagKeys: string[], context?: FlagEvaluationContext): Promise<Record<string, boolean>> {
     const results = await this.featureFlagService.bulkEvaluate(flagKeys, context);
-    return results.reduce((acc, result) => {
-      acc[result.flagKey] = result.enabled;
-      return acc;
-    }, {} as Record<string, boolean>);
+    return results.reduce(
+      (acc, result) => {
+        acc[result.flagKey] = result.enabled;
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
   }
 
   /**
@@ -57,11 +60,11 @@ export class FeatureFlagHelperService {
       email: userEmail,
       role: userRole,
     };
-    
+
     // Get all active flags
     const { flags } = await this.featureFlagService.findAll({ status: 'ACTIVE' as any });
     const flagKeys = flags.map(flag => flag.key);
-    
+
     return this.areEnabled(flagKeys, context);
   }
 
@@ -75,26 +78,22 @@ export class FeatureFlagHelperService {
     context?: FlagEvaluationContext,
   ): Promise<T> {
     const isEnabled = await this.isEnabled(flagKey, context);
-    
+
     if (isEnabled) {
       return await enabledFn();
     }
-    
+
     if (disabledFn) {
       return await disabledFn();
     }
-    
+
     throw new Error(`Feature flag '${flagKey}' is not enabled`);
   }
 
   /**
    * Get feature flag with fallback value
    */
-  async getValueWithFallback<T>(
-    flagKey: string,
-    fallback: T,
-    context?: FlagEvaluationContext,
-  ): Promise<T> {
+  async getValueWithFallback<T>(flagKey: string, fallback: T, context?: FlagEvaluationContext): Promise<T> {
     try {
       const result = await this.getResult(flagKey, context);
       return result.enabled ? (result.value as T) : fallback;
@@ -122,7 +121,11 @@ export class FeatureFlagHelperService {
   /**
    * Check premium features based on user plan
    */
-  async isPremiumFeatureEnabled(featureName: string, userPlan: string, context?: FlagEvaluationContext): Promise<boolean> {
+  async isPremiumFeatureEnabled(
+    featureName: string,
+    userPlan: string,
+    context?: FlagEvaluationContext,
+  ): Promise<boolean> {
     const flagKey = `premium-${featureName}`;
     const enhancedContext = {
       ...context,
@@ -131,7 +134,7 @@ export class FeatureFlagHelperService {
         plan: userPlan,
       },
     };
-    
+
     return this.isEnabled(flagKey, enhancedContext);
   }
 
@@ -143,7 +146,7 @@ export class FeatureFlagHelperService {
       ...context,
       userId,
     };
-    
+
     return this.isEnabled(flagKey, enhancedContext);
   }
 
@@ -182,7 +185,7 @@ export class FeatureFlagHelperService {
     const { flags } = await this.featureFlagService.findAll({ status: 'ACTIVE' as any });
     const flagKeys = flags.map(flag => flag.key);
     const enabledFlags = await this.areEnabled(flagKeys, context);
-    
+
     return Object.entries(enabledFlags)
       .filter(([_, enabled]) => enabled)
       .map(([flagKey]) => flagKey);
@@ -210,7 +213,7 @@ export class FeatureFlagHelperService {
         ...conditions.customAttributes,
       },
     };
-    
+
     return this.isEnabled(flagKey, context);
   }
 }
