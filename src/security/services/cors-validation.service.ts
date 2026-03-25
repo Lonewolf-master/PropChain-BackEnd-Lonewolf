@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export interface CorsOriginConfig {
-  allowedOrigins: string[];
+  allowedOrigins: Array<string | RegExp>;
   allowCredentials: boolean;
   allowedMethods: string[];
   allowedHeaders: string[];

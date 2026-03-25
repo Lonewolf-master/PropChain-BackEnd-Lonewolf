@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FileValidationService } from './file-validation.service';
-import { MalwareScannerService } from './malware-scanner.service';
+import { FileValidationService } from '../services/file-validation.service';
+import { MalwareScannerService } from '../services/malware-scanner.service';
 
 export interface SecureFileUploadConfig {
   maxFileSize: number;

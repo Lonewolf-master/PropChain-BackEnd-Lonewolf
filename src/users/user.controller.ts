@@ -4,10 +4,6 @@ import { CreateUserDto } from './dto/create-user.dto';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
-  ApiBody,
-  ApiBearerAuth,
-  ApiParam,
   ApiExtraModels,
   ApiOkResponse,
   ApiBadRequestResponse,

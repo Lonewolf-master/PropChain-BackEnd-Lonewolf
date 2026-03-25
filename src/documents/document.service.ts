@@ -5,6 +5,7 @@ import axios from 'axios';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import storageConfig, { StorageConfig } from '../config/storage.config';
+import { MalwareScannerService } from '../security/services/malware-scanner.service';
 import {
   DocumentAccessContext,
   DocumentAccessLevel,
@@ -187,6 +188,7 @@ export class DocumentService {
     @Inject(STORAGE_CONFIG) private readonly config: StorageConfig = storageConfig(),
     @Inject(STORAGE_PROVIDER)
     private readonly storageProvider: StorageProvider = new InMemoryStorageProvider(storageConfig()),
+    private readonly malwareScanner?: MalwareScannerService,
   ) {}
 
   async uploadDocuments(
@@ -347,7 +349,7 @@ export class DocumentService {
     versionNumber = 1,
   ): Promise<DocumentVersion> {
     await this.validateFile(file);
-    this.scanForVirus(file.buffer);
+    await this.scanForVirus(file.buffer, file.originalname);
 
     const checksum = DocumentService.hashBuffer(file.buffer);
     const storageKey = this.buildStorageKey(documentId, versionNumber, file.originalname);
@@ -426,7 +428,19 @@ export class DocumentService {
     }
   }
 
-  private scanForVirus(buffer: Buffer): void {
+  private async scanForVirus(buffer: Buffer, filename?: string): Promise<void> {
+    // Use the real MalwareScannerService if available
+    if (this.malwareScanner) {
+      const result = await this.malwareScanner.scanFile(buffer, filename);
+      if (!result.isClean) {
+        throw new BadRequestException(
+          `Malware detected in file: ${result.virusName || 'Unknown virus'}`,
+        );
+      }
+      return;
+    }
+    
+    // Fallback to basic signature check if no malware scanner is available
     if (buffer.toString('utf8').includes(DocumentService.virusSignature)) {
       throw new BadRequestException('File failed virus scan');
     }

@@ -34,7 +34,6 @@ describe('DocumentController', () => {
     const controller = new DocumentController(
       service as DocumentService,
       secureFileValidator as SecureFileValidator,
-      configService as ConfigService,
     );
 
     await controller.uploadDocuments(

@@ -11,10 +11,8 @@ import {
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiHeader, ApiConsumes } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
-import { getMultipleFileUploadOptions, getSingleFileUploadOptions } from '../security/config/multer.config';
+import { DocumentFilesUploadInterceptor, DocumentFileUploadInterceptor } from './interceptors/document-upload.interceptor';
 import { SecureFileValidator } from '../security/validators/secure-file.validator';
 import { DocumentAccessContext, DocumentMetadataInput, DocumentSearchFilters } from './document.model';
 import { DocumentService } from './document.service';
@@ -33,11 +31,10 @@ export class DocumentController {
   constructor(
     private readonly documentService: DocumentService,
     private readonly secureFileValidator: SecureFileValidator,
-    private readonly configService: ConfigService,
   ) {}
 
   @Post('upload')
-  @UseInterceptors(FilesInterceptor('files', undefined, getMultipleFileUploadOptions(this.configService)))
+  @UseInterceptors(DocumentFilesUploadInterceptor)
   @ApiOperation({ summary: 'Upload documents with metadata' })
   @ApiConsumes('multipart/form-data')
   @ApiHeader({ name: 'x-user-id', description: 'User ID', required: true })
@@ -61,7 +58,7 @@ export class DocumentController {
   }
 
   @Post(':id/version')
-  @UseInterceptors(FileInterceptor('file', undefined, getSingleFileUploadOptions(this.configService)))
+  @UseInterceptors(DocumentFileUploadInterceptor)
   @ApiOperation({ summary: 'Add a new version to existing document' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Document ID' })

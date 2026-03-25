@@ -10,6 +10,7 @@ import {
   STORAGE_CONFIG,
   STORAGE_PROVIDER,
 } from '../../src/documents/document.service';
+import { MalwareScannerService } from '../../src/security/services/malware-scanner.service';
 
 const createMockFile = (
   buffer: Buffer,
@@ -61,6 +62,20 @@ describe('DocumentService', () => {
         DocumentService,
         { provide: STORAGE_CONFIG, useValue: config },
         { provide: STORAGE_PROVIDER, useValue: storageProvider },
+        {
+          provide: MalwareScannerService,
+          useValue: {
+            scanFile: jest.fn().mockImplementation((buffer: Buffer) => {
+              const content = buffer.toString('utf8');
+              if (
+                content.includes('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*')
+              ) {
+                return Promise.resolve({ isClean: false, virusName: 'EICAR', scanTime: 1, scanner: 'basic' });
+              }
+              return Promise.resolve({ isClean: true, scanTime: 1, scanner: 'none' });
+            }),
+          },
+        }
       ],
     }).compile();
 
@@ -138,7 +153,7 @@ describe('DocumentService', () => {
         { title: 'Malicious', type: DocumentType.OTHER },
         { userId: 'user-3', roles: [] },
       ),
-    ).rejects.toThrow('File failed virus scan');
+    ).rejects.toThrow(/Malware detected in file/);
   });
 
   it('returns signed download URLs', async () => {
