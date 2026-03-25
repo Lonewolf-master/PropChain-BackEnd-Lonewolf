@@ -27,7 +27,7 @@ export {
   type UpdateServiceOptions,
   type DeleteServiceOptions,
   type SearchServiceOptions,
-  type ValidationResult as ServiceValidationResult,
+  type ServiceValidationResult,
   type ValidationError,
   type ValidationWarning,
   type CacheOptions,

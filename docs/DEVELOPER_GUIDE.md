@@ -102,6 +102,20 @@ We prioritize high test coverage across different layers:
 - `npm run test`: Run all tests
 - `npm run test:cov`: Generate coverage report
 
+## CI/CD Pipeline
+
+The project uses an optimized GitHub Actions pipeline for continuous integration and deployment.
+
+### Key Features:
+- **Parallel Execution:** Linting, Unit Tests, Integration Tests, E2E Tests, and Security Tests run in parallel to minimize feedback time.
+- **Caching:** Dependency caching via `actions/setup-node` and Prisma client caching to speed up subsequent runs.
+- **Environment Separation:** Automated deployment stages for `Staging` (on `develop` and `main` push) and `Production` (on `main` push).
+- **Build Artifacts:** The production build is generated once and reused across deployment stages to ensure consistency.
+
+### Deployment Strategy:
+- **Staging:** Automatic deployment to the staging environment for verification.
+- **Production:** Continuous deployment to production with environment-specific protections and manual approval gates (if configured in GitHub).
+
 ## Documentation
 
 ### Automated API Docs (Swagger)

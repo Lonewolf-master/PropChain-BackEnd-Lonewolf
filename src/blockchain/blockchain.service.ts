@@ -15,10 +15,16 @@ export class BlockchainService {
     });
   }
 
+  /**
+   * Get the blockchain provider for a specific chain
+   */
   getProvider(chain: SupportedChain) {
     return this.providers.get(chain);
   }
 
+  /**
+   * Estimate gas for a transaction
+   */
   async estimateGas(): Promise<number> {
     // In a real application, this would use a provider to estimate fees.
     // For now, return a placeholder value.
@@ -26,21 +32,31 @@ export class BlockchainService {
     return 0.0005; // Placeholder value
   }
 
+  /**
+   * Create an escrow wallet address
+   */
   async createEscrowWallet(): Promise<string> {
     this.logger.log('Creating new escrow wallet...');
     const wallet = ethers.Wallet.createRandom();
     return wallet.address;
   }
 
+  /**
+   * Get transaction receipt from blockchain
+   */
   async getTransactionReceipt(hash: string): Promise<any> {
     this.logger.log(`Fetching receipt for hash: ${hash}`);
     const provider = this.getProvider(SupportedChain.ETHEREUM);
     if (!provider) {
       throw new Error('Default provider not found');
     }
-    return provider.getTransactionReceipt(hash);
+    const receipt = await provider.getTransactionReceipt(hash);
+    return receipt || { confirmations: 0 };
   }
 
+  /**
+   * Get current network status for a specific chain
+   */
   async getNetworkStatus(chain: SupportedChain) {
     const provider = this.getProvider(chain);
     if (!provider) {
@@ -53,30 +69,5 @@ export class BlockchainService {
       latestBlock: block,
       healthy: true,
     };
-  }
-
-  /**
-   * Estimate gas for a transaction
-   */
-  estimateGas(): number {
-    // Return estimated gas fee in ETH
-    return 0.001; // Example value
-  }
-
-  /**
-   * Create an escrow wallet address
-   */
-  async createEscrowWallet(): Promise<string> {
-    // Generate a random escrow wallet address
-    const wallet = ethers.Wallet.createRandom();
-    return wallet.address;
-  }
-
-  /**
-   * Get transaction receipt from blockchain
-   */
-  async getTransactionReceipt(txHash: string): Promise<{ confirmations: number }> {
-    // Return mock confirmations
-    return { confirmations: 6 };
   }
 }

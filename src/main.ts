@@ -56,7 +56,6 @@ async function bootstrap() {
     }
   }
 
-
   // Apply security headers middleware
   const securityHeaders = securityHeadersService.getSecurityHeaders(securityConfig);
   app.use((req: any, res: any, next: () => void) => {

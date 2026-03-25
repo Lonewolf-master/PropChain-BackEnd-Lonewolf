@@ -1,41 +1,231 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build_and_test:
+  setup:
+    name: Setup & Cache
+    runs-on: ubuntu-latest
+    outputs:
+      node-version: ${{ steps.setup-node.outputs.node-version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Cache Prisma Client
+        uses: actions/cache@v4
+        id: cache-prisma
+        with:
+          path: node_modules/.prisma
+          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
+
+  lint:
+    name: Linting
+    needs: setup
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Build (CI target)
-        run: npm run build:ci
-
-      - name: Lint
+      - name: Run ESLint
         run: npm run lint
 
-      - name: Test
-        run: npm run test:ci
+  test-unit:
+    name: Unit Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Upload JUnit report
-        if: always()
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Unit Tests
+        run: npm run test:unit
+        env:
+          NODE_ENV: test
+
+  test-integration:
+    name: Integration Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Integration Tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+
+  test-e2e:
+    name: E2E Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E Tests
+        run: npm run test:e2e
+        env:
+          NODE_ENV: test
+
+  test-security:
+    name: Security Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Security Tests
+        run: npm run test:security
+        env:
+          NODE_ENV: test
+
+  build:
+    name: Build (Production Target)
+    needs: [lint, test-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: junit-report
-          path: junit.xml
+          name: build-artifact
+          path: dist/
+          retention-days: 1
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [build, test-integration, test-e2e, test-security]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: dist
+
+      - name: Deploy to Staging Server
+        run: echo "🚀 Deploying to staging environment... (Placeholder)"
+        # Actual deployment logic would go here:
+        # - npm run deploy:staging
+        # - scp -r dist/* user@staging-host:/var/www/propchain
+        # - heroku/deploy-action@v5
+        # - aws ecs update-service...
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [deploy-staging]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.propchain.com
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: dist
+
+      - name: Run Production Migrations
+        run: echo "🛠 Running production database migrations... (Placeholder)"
+        # run: npx prisma migrate deploy
+
+      - name: Deploy to Production Cluster
+        run: echo "🚀 Deploying to production environment... (Blue/Green Strategy Placeholder)"
+        # Actual deployment strategy logic (Blue/Green or Canary):
+        # - Implement traffic routing switch
+        # - Health checks check

@@ -138,11 +138,7 @@ export class FeatureFlagService {
     return null;
   }
 
-  async update(
-    id: string,
-    updateFlagDto: UpdateFeatureFlagDto,
-    updatedBy: string,
-  ): Promise<FeatureFlag> {
+  async update(id: string, updateFlagDto: UpdateFeatureFlagDto, updatedBy: string): Promise<FeatureFlag> {
     const existingFlag = await this.getById(id);
     if (!existingFlag) {
       throw new Error(`Feature flag with id '${id}' not found`);
@@ -184,10 +180,7 @@ export class FeatureFlagService {
     this.logger.log(`Deleted feature flag: ${flag.key}`);
   }
 
-  async evaluate(
-    flagKey: string,
-    context: FlagEvaluationContext = {},
-  ): Promise<FlagEvaluationResult> {
+  async evaluate(flagKey: string, context: FlagEvaluationContext = {}): Promise<FlagEvaluationResult> {
     const flag = await this.getByKey(flagKey);
     if (!flag) {
       return {
@@ -229,10 +222,7 @@ export class FeatureFlagService {
     return result;
   }
 
-  async bulkEvaluate(
-    flagKeys: string[],
-    context: FlagEvaluationContext = {},
-  ): Promise<FlagEvaluationResult[]> {
+  async bulkEvaluate(flagKeys: string[], context: FlagEvaluationContext = {}): Promise<FlagEvaluationResult[]> {
     const results: FlagEvaluationResult[] = [];
 
     for (const flagKey of flagKeys) {
@@ -410,13 +400,12 @@ export class FeatureFlagService {
     }
   }
 
-  private evaluateConditions(
-    conditions: FlagCondition[],
-    context: FlagEvaluationContext,
-  ): boolean {
-    if (conditions.length === 0) return false;
+  private evaluateConditions(conditions: FlagCondition[], context: FlagEvaluationContext): boolean {
+    if (conditions.length === 0) {
+      return false;
+    }
 
-    return conditions.every((condition) => {
+    return conditions.every(condition => {
       const fieldValue = this.getFieldValue(condition.field, context);
       return this.compareValues(fieldValue, condition.operator, condition.value);
     });
@@ -456,11 +445,7 @@ export class FeatureFlagService {
       case 'nin':
         return Array.isArray(expected) && !expected.includes(actual);
       case 'contains':
-        return (
-          typeof actual === 'string' &&
-          typeof expected === 'string' &&
-          actual.includes(expected)
-        );
+        return typeof actual === 'string' && typeof expected === 'string' && actual.includes(expected);
       default:
         return false;
     }
@@ -519,22 +504,32 @@ export class FeatureFlagService {
   }
 
   private matchesFilters(flag: FeatureFlag, query?: FlagQueryDto): boolean {
-    if (!query) return true;
+    if (!query) {
+      return true;
+    }
 
     const { keys, status, type, tags, search } = query;
 
     if (keys) {
-      const keyList = keys.split(',').map((k) => k.trim());
-      if (!keyList.includes(flag.key)) return false;
+      const keyList = keys.split(',').map(k => k.trim());
+      if (!keyList.includes(flag.key)) {
+        return false;
+      }
     }
 
-    if (status && flag.status !== status) return false;
-    if (type && flag.type !== type) return false;
+    if (status && flag.status !== status) {
+      return false;
+    }
+    if (type && flag.type !== type) {
+      return false;
+    }
 
     if (tags) {
-      const tagList = tags.split(',').map((t) => t.trim());
-      const hasMatchingTag = tagList.some((tag) => flag.tags.includes(tag));
-      if (!hasMatchingTag) return false;
+      const tagList = tags.split(',').map(t => t.trim());
+      const hasMatchingTag = tagList.some(tag => flag.tags.includes(tag));
+      if (!hasMatchingTag) {
+        return false;
+      }
     }
 
     if (search) {
@@ -542,14 +537,18 @@ export class FeatureFlagService {
       const nameMatch = flag.name.toLowerCase().includes(searchLower);
       const descMatch = flag.description.toLowerCase().includes(searchLower);
       const keyMatch = flag.key.toLowerCase().includes(searchLower);
-      if (!nameMatch && !descMatch && !keyMatch) return false;
+      if (!nameMatch && !descMatch && !keyMatch) {
+        return false;
+      }
     }
 
     return true;
   }
 
   private serializeQuery(query?: FlagQueryDto): string {
-    if (!query) return '';
+    if (!query) {
+      return '';
+    }
 
     const filtered = Object.entries(query)
       .filter(([_key, value]) => value !== undefined && value !== null)
