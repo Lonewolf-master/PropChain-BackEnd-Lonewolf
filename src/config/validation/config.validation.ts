@@ -1,6 +1,55 @@
 import * as Joi from 'joi';
 
 /**
+ * Custom validation for CORS origins
+ * - '*' is only allowed in development/test environments
+ * - Production/staging must use specific domains
+ */
+const corsOriginValidation = (value: string, helpers: Joi.CustomHelpers) => {
+  const nodeEnv = Joi.ref('$NODE_ENV');
+  
+  // If no value provided, error
+  if (!value || value.trim() === '') {
+    return helpers.error('cors.origin.required');
+  }
+  
+  // Allow '*' only in development and test
+  if (value === '*') {
+    const env = helpers.prefs?.context?.NODE_ENV || 'development';
+    if (env !== 'development' && env !== 'test') {
+      return helpers.error('cors.origin.wildcard.notAllowed');
+    }
+    return value;
+  }
+  
+  // Validate individual origins (comma-separated)
+  const origins = value.split(',').map(o => o.trim());
+  const urlPattern = /^https?:\/\/[\w.-]+(:\d+)?(\/.*)?$/;
+  
+  for (const origin of origins) {
+    if (origin === '*') {
+      return helpers.error('cors.origin.wildcard.notAllowed');
+    }
+    
+    // Allow 'http://localhost' and 'http://localhost:*' variants
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      const env = helpers.prefs?.context?.NODE_ENV || 'development';
+      if (env !== 'development' && env !== 'test') {
+        return helpers.error('cors.origin.localhost.notAllowed');
+      }
+      continue;
+    }
+    
+    // Validate URL format
+    if (!urlPattern.test(origin)) {
+      return helpers.error('cors.origin.invalidFormat', { origin });
+    }
+  }
+  
+  return value;
+};
+
+/**
  * Joi validation schema for application configuration
  */
 export const configValidationSchema = Joi.object({
@@ -9,7 +58,12 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   HOST: Joi.string().default('0.0.0.0'),
   API_PREFIX: Joi.string().default('api'),
-  CORS_ORIGIN: Joi.string().default('*'),
+  CORS_ORIGIN: Joi.string().custom(corsOriginValidation).default('*').messages({
+    'cors.origin.required': 'CORS_ORIGIN is required',
+    'cors.origin.wildcard.notAllowed': 'Wildcard (*) origin is not allowed in production/staging. Specify explicit allowed origins.',
+    'cors.origin.localhost.notAllowed': 'Localhost origins are not allowed in production/staging',
+    'cors.origin.invalidFormat': 'Invalid origin format: "{{origin}}". Must be a valid URL (e.g., https://example.com)',
+  }),
   SWAGGER_ENABLED: Joi.boolean().default(true),
 
   // Database

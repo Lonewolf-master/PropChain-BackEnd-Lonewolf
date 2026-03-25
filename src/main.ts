@@ -9,6 +9,7 @@ import { StructuredLoggerService } from './common/logging/logger.service';
 import { ErrorResponseDto } from './common/errors/error.dto';
 import { SecurityHeadersService } from './security/services/security-headers.service';
 import { DEFAULT_API_VERSION } from './common/api-version';
+import { CorsOriginValidator } from './config/utils/cors-origin.validator';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -67,13 +68,30 @@ async function bootstrap() {
 
   logger.log(`Security headers configured: ${Object.keys(securityHeaders).length} headers applied`);
 
-  // CORS configuration
+  // CORS configuration with validation
+  const corsOrigin = configService.get('CORS_ORIGIN');
+  const nodeEnv = configService.get('NODE_ENV', 'development');
+  
+  // Validate CORS origins before configuring
+  const validatedOrigins = CorsOriginValidator.validate(corsOrigin, nodeEnv);
+  
+  if (!validatedOrigins) {
+    logger.error('Invalid CORS configuration detected. Application cannot start with insecure CORS settings.');
+    if (nodeEnv === 'production' || nodeEnv === 'staging') {
+      process.exit(1); // Fail hard in production/staging
+    }
+  }
+  
+  const corsOrigins = CorsOriginValidator.parseForNestJs(corsOrigin);
+  
   app.enableCors({
-    origin: configService.get('CORS_ORIGIN', '*'),
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-correlation-id'],
   });
+  
+  logger.log(`CORS configured with origins: ${corsOrigins.join(', ')}`);
 
   // Global pipes
   app.useGlobalPipes(
