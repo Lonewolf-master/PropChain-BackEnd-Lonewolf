@@ -1,6 +1,8 @@
 import { DocumentController } from '../../src/documents/document.controller';
 import { DocumentAccessLevel, DocumentType } from '../../src/documents/document.model';
 import { DocumentService } from '../../src/documents/document.service';
+import { SecureFileValidator } from '../../src/security/validators/secure-file.validator';
+import { ConfigService } from '@nestjs/config';
 
 describe('DocumentController', () => {
   const createMockFile = (): Express.Multer.File => ({
@@ -20,7 +22,18 @@ describe('DocumentController', () => {
     const service: Partial<DocumentService> = {
       uploadDocuments: jest.fn().mockResolvedValue([{ id: 'doc-1' }]),
     };
-    const controller = new DocumentController(service as DocumentService);
+    const secureFileValidator: Partial<SecureFileValidator> = {
+      validate: jest.fn().mockResolvedValue(undefined),
+    };
+    const configService: Partial<ConfigService> = {
+      get: jest.fn((key: string, defaultValue: any) => defaultValue),
+    };
+    
+    const controller = new DocumentController(
+      service as DocumentService,
+      secureFileValidator as SecureFileValidator,
+      configService as ConfigService,
+    );
 
     await controller.uploadDocuments(
       [createMockFile()],
