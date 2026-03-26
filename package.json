@@ -16,6 +16,8 @@
     "start:prod": "cross-env NODE_ENV=production node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest --config ./jest.config.js",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+    "format:check": "prettier --check .",
     "test:watch": "jest --config ./jest.config.js --watch",
     "test:cov": "jest --config ./jest.config.js --coverage --coverageReporters=text --coverageReporters=html --coverageReporters=lcov",
     "test:unit": "jest --config ./jest.config.js --testPathPattern=spec",
