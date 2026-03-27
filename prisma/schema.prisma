@@ -128,6 +128,7 @@ model Property {
   transactions      Transaction[]
   valuations        PropertyValuation[]
   documents         Document[]
+  withdrawals       Withdrawal[]
 
   latitude   Float?
   longitude  Float?
@@ -236,6 +237,28 @@ enum DonationStatus {
   PENDING
   CONFIRMED
   FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model Withdrawal {
+  id              String           @id @default(cuid())
+  projectId       String?          @map("project_id")
+  amount          Decimal
+  status          WithdrawalStatus @default(PENDING)
+  transactionHash String?          @map("transaction_hash")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  project Property? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@map("withdrawals")
 }
 
 model Role {

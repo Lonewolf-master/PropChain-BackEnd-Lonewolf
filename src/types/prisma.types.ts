@@ -78,6 +78,16 @@ export interface PrismaDonation {
   updatedAt: Date;
 }
 
+export interface PrismaWithdrawal {
+  id: string;
+  projectId?: string | null;
+  amount: any; // Will be Decimal when Prisma is available
+  status: string;
+  transactionHash?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface PrismaRole {
   id: string;
   name: string;

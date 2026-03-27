@@ -46,6 +46,7 @@ import { PropertiesModule } from './properties/properties.module';
 import { UsersModule } from './users/users.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { DonationsModule } from './donations/donations.module';
+import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { AuthModule } from './auth/auth.module';
 import { FilesModule } from './files/files.module';
@@ -186,6 +187,7 @@ import { BoundaryValidationModule } from './common/validation';
 
     // Donations
     DonationsModule,
+    WithdrawalsModule,
 
     // Compression
     CompressionModule,
