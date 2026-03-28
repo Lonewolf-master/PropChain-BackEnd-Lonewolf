@@ -79,4 +79,18 @@ export class BlockchainService {
   ): Promise<void> {
     return this.submitPuzzleProvider.submitPuzzleOnChain(stellarWallet, puzzleId, category, score);
   }
+
+  /**
+   * Get the latest block height from blockchain
+   */
+  async getLatestBlockHeight(): Promise<number> {
+    this.logger.debug('Fetching latest block height...');
+    const provider = this.getProvider(SupportedChain.ETHEREUM);
+    if (!provider) {
+      throw new Error('Default provider not found');
+    }
+    const blockNumber = await provider.getBlockNumber();
+    this.logger.debug(`Latest block height: ${blockNumber}`);
+    return blockNumber;
+  }
 }
