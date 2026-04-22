@@ -37,7 +37,7 @@ import {
   verifyTotpCode,
 } from './security.utils';
 import { AuthUserPayload } from './types/auth-user.type';
-
+import { LoginRateLimitService } from './login-rate-limit.service';
 import { UserRole } from '@prisma/client';
 
 type JwtPayload = {
@@ -63,6 +63,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly rateLimitService: LoginRateLimitService,
   ) {
     this.jwtSecret = this.configService.get<string>('JWT_SECRET') ?? 'propchain-access-secret';
     this.jwtRefreshSecret =
@@ -107,9 +108,21 @@ export class AuthService {
     };
   }
 
-  async login(data: LoginDto) {
+  async login(data: LoginDto, ipAddress?: string, userAgent?: string) {
+    // Check if account is locked out
+    const isLocked = await this.rateLimitService.isAccountLocked(data.email);
+    if (isLocked) {
+      const lockoutInfo = await this.rateLimitService.getLockoutInfo(data.email);
+      const remainingMinutes = lockoutInfo?.remainingLockoutMinutes ?? 0;
+      throw new UnauthorizedException(
+        `Account temporarily locked due to too many failed login attempts. Please try again in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}.`,
+      );
+    }
+
     const user = await this.usersService.findByEmail(data.email);
     if (!user) {
+      // Record failed attempt even if user doesn't exist (prevent enumeration)
+      await this.rateLimitService.recordFailedAttempt(data.email, ipAddress, userAgent);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -117,8 +130,27 @@ export class AuthService {
       throw new UnauthorizedException('Your account has been blocked. Please contact support.');
     }
 
+    if (user.isDeactivated) {
+      throw new UnauthorizedException(
+        'Your account has been deactivated. Please contact support to reactivate your account.',
+      );
+    }
+
     const passwordMatches = await comparePassword(data.password, user.password);
     if (!passwordMatches) {
+      // Record failed login attempt
+      const shouldLock = await this.rateLimitService.recordFailedAttempt(
+        data.email,
+        ipAddress,
+        userAgent,
+      );
+
+      if (shouldLock) {
+        throw new UnauthorizedException(
+          'Account locked due to too many failed login attempts. Please try again in 15 minutes.',
+        );
+      }
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -156,6 +188,9 @@ export class AuthService {
       }
     }
 
+    // Record successful login
+    await this.rateLimitService.recordSuccessfulAttempt(data.email, ipAddress, userAgent);
+
     const tokens = await this.issueTokenPair(user);
     return {
       user: sanitizeUser(user),
@@ -181,6 +216,10 @@ export class AuthService {
 
     if (user.isBlocked) {
       throw new UnauthorizedException('Your account has been blocked');
+    }
+
+    if (user.isDeactivated) {
+      throw new UnauthorizedException('Your account has been deactivated');
     }
 
     if (user.id !== payload.sub) {
@@ -239,6 +278,162 @@ export class AuthService {
     }
 
     return sanitizeUser(foundUser);
+  }
+
+  async getDashboard(user: AuthUserPayload) {
+    const foundUser = await this.prisma.user.findUnique({
+      where: { id: user.sub },
+    });
+
+    if (!foundUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const [properties, buyerTransactions, sellerTransactions, documents, apiKeys] = await Promise.all([
+      this.prisma.property.findMany({
+        where: { ownerId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.transaction.findMany({
+        where: { buyerId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          property: {
+            select: {
+              id: true,
+              title: true,
+              address: true,
+              city: true,
+              state: true,
+              price: true,
+            },
+          },
+          seller: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      }),
+      this.prisma.transaction.findMany({
+        where: { sellerId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          property: {
+            select: {
+              id: true,
+              title: true,
+              address: true,
+              city: true,
+              state: true,
+              price: true,
+            },
+          },
+          buyer: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      }),
+      this.prisma.document.findMany({
+        where: { userId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      this.prisma.apiKey.findMany({
+        where: { userId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+    ]);
+
+    const [
+      totalProperties,
+      activeListings,
+      pendingSales,
+      totalPurchases,
+      totalSales,
+      completedPurchases,
+      completedSales,
+    ] = await Promise.all([
+      this.prisma.property.count({ where: { ownerId: user.sub } }),
+      this.prisma.property.count({ where: { ownerId: user.sub, status: 'ACTIVE' } }),
+      this.prisma.transaction.count({ where: { sellerId: user.sub, status: 'PENDING' } }),
+      this.prisma.transaction.count({ where: { buyerId: user.sub } }),
+      this.prisma.transaction.count({ where: { sellerId: user.sub } }),
+      this.prisma.transaction.count({ where: { buyerId: user.sub, status: 'COMPLETED' } }),
+      this.prisma.transaction.count({ where: { sellerId: user.sub, status: 'COMPLETED' } }),
+    ]);
+
+    const recommendationProperties = await this.prisma.property.findMany({
+      where: {
+        status: 'ACTIVE',
+        ownerId: { not: user.sub },
+        NOT: {
+          ownerId: user.sub,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: {
+        owner: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    const recentActivity = [
+      ...transactionsToActivityItems(buyerTransactions, 'purchase'),
+      ...transactionsToActivityItems(sellerTransactions, 'sale'),
+      ...documents.map((doc) => ({
+        type: 'document' as const,
+        id: doc.id,
+        title: doc.fileName,
+        description: `Uploaded ${doc.documentType.toLowerCase().replace('_', ' ')}`,
+        timestamp: doc.createdAt,
+      })),
+    ]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
+
+    return {
+      profile: sanitizeUser(foundUser),
+      quickStats: {
+        totalProperties,
+        activeListings,
+        pendingSales,
+        totalPurchases,
+        totalSales,
+        completedPurchases,
+        completedSales,
+        apiKeysCount: apiKeys.length,
+      },
+      recentActivity,
+      recommendations: recommendationProperties.map((p) => ({
+        id: p.id,
+        title: p.title,
+        address: p.address,
+        city: p.city,
+        state: p.state,
+        price: p.price.toString(),
+        propertyType: p.propertyType,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms?.toString(),
+        squareFeet: p.squareFeet?.toString(),
+        status: p.status,
+        agent: `${p.owner.firstName} ${p.owner.lastName}`,
+        createdAt: p.createdAt,
+      })),
+    };
   }
 
   async changePassword(user: AuthUserPayload, data: ChangePasswordDto) {
@@ -737,10 +932,37 @@ export class AuthService {
       if (historyEntries.length > 0) {
         await tx.passwordHistory.deleteMany({
           where: {
-            id: { in: historyEntries.map(entry => entry.id) },
+            id: { in: historyEntries.map((entry) => entry.id) },
           },
         });
       }
     });
+  }
+
+  async unlockAccount(email: string) {
+    await this.rateLimitService.unlockAccount(email);
+    return { message: 'Account unlocked successfully. You can now try to log in again.' };
+  }
+
+  async getLoginStatus(email: string) {
+    const lockoutInfo = await this.rateLimitService.getLockoutInfo(email);
+
+    if (!lockoutInfo) {
+      return {
+        email,
+        isLocked: false,
+        failedAttempts: 0,
+        canAttemptLogin: true,
+      };
+    }
+
+    return {
+      email,
+      isLocked: lockoutInfo.isLocked,
+      failedAttempts: lockoutInfo.failedAttempts,
+      unlockAt: lockoutInfo.unlockAt,
+      remainingLockoutMinutes: lockoutInfo.remainingLockoutMinutes,
+      canAttemptLogin: !lockoutInfo.isLocked,
+    };
   }
 }

@@ -16,6 +16,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiKeyAuthGuard } from './guards/api-key-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthUserPayload } from './types/auth-user.type';
+import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -27,8 +28,10 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  login(@Body() loginDto: LoginDto, @Req() request: Request) {
+    const ipAddress = request.ip || request.socket.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.login(loginDto, ipAddress, userAgent);
   }
 
   @Post('refresh')
@@ -128,5 +131,15 @@ export class AuthController {
   @Post('password-reset/reset')
   resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('unlock-account')
+  unlockAccount(@Body() data: { email: string }) {
+    return this.authService.unlockAccount(data.email);
+  }
+
+  @Post('login-status')
+  getLoginStatus(@Body() data: { email: string }) {
+    return this.authService.getLoginStatus(data.email);
   }
 }

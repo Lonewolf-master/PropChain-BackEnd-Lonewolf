@@ -14,10 +14,7 @@ export class PropertiesController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  create(
-    @Body() createPropertyDto: CreatePropertyDto,
-    @CurrentUser() user: AuthUserPayload,
-  ) {
+  create(@Body() createPropertyDto: CreatePropertyDto, @CurrentUser() user: AuthUserPayload) {
     return this.propertiesService.create(createPropertyDto, user.sub);
   }
 

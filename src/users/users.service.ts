@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
+import { DeactivateAccountDto, ReactivateAccountDto } from './dto/deactivation.dto';
 import { hashPassword, sanitizeUser } from '../auth/security.utils';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateUserDto) {
@@ -30,6 +33,9 @@ export class UsersService {
 
   async findAll() {
     return this.prisma.user.findMany({
+      where: {
+        isDeactivated: false, // Hide deactivated users
+      },
       select: {
         id: true,
         email: true,
@@ -43,8 +49,11 @@ export class UsersService {
   }
 
   async findOne(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id,
+        isDeactivated: false, // Don't show deactivated users
+      },
       select: {
         id: true,
         email: true,
@@ -58,6 +67,8 @@ export class UsersService {
         updatedAt: true,
       },
     });
+
+    return user;
   }
 
   async findByEmail(email: string) {
@@ -130,5 +141,172 @@ export class UsersService {
     return this.prisma.user.delete({
       where: { id },
     });
+  }
+
+  async deactivate(userId: string, data: DeactivateAccountDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.isDeactivated) {
+      throw new Error('Account is already deactivated');
+    }
+
+    // Calculate scheduled deletion date (30 days from now if scheduled)
+    const scheduledDeletionAt = data.scheduleDeletion
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+      : null;
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isDeactivated: true,
+        deactivatedAt: new Date(),
+        scheduledDeletionAt,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isDeactivated: true,
+        deactivatedAt: true,
+        scheduledDeletionAt: true,
+      },
+    });
+
+    this.logger.log(
+      `User ${userId} (${user.email}) deactivated. Scheduled deletion: ${scheduledDeletionAt ? scheduledDeletionAt.toISOString() : 'None'}`,
+    );
+
+    return updatedUser;
+  }
+
+  async reactivate(userId: string, data: ReactivateAccountDto = {}) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (!user.isDeactivated) {
+      throw new Error('Account is not deactivated');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isDeactivated: false,
+        deactivatedAt: null,
+        scheduledDeletionAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isDeactivated: true,
+        deactivatedAt: true,
+        scheduledDeletionAt: true,
+      },
+    });
+
+    this.logger.log(`User ${userId} (${user.email}) reactivated`);
+
+    return updatedUser;
+  }
+
+  async findActiveUsers() {
+    return this.prisma.user.findMany({
+      where: {
+        isDeactivated: false,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isVerified: true,
+        avatar: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async findScheduledForDeletion() {
+    return this.prisma.user.findMany({
+      where: {
+        isDeactivated: true,
+        scheduledDeletionAt: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        deactivatedAt: true,
+        scheduledDeletionAt: true,
+      },
+    });
+  }
+
+  async deleteDeactivatedUsers() {
+    const now = new Date();
+
+    // Find users ready for deletion
+    const usersToDelete = await this.prisma.user.findMany({
+      where: {
+        isDeactivated: true,
+        scheduledDeletionAt: {
+          lte: now,
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+
+    if (usersToDelete.length === 0) {
+      return { deletedCount: 0 };
+    }
+
+    const userIds = usersToDelete.map((u: { id: string; email: string }) => u.id);
+
+    // Delete in transaction to ensure atomicity
+    const result = await this.prisma.$transaction(async (tx: any) => {
+      // Delete related records first (if not using cascade)
+      await tx.loginAttempt.deleteMany({
+        where: {
+          email: {
+            in: usersToDelete.map((u: { id: string; email: string }) => u.email),
+          },
+        },
+      });
+
+      // Delete users
+      const deleteResult = await tx.user.deleteMany({
+        where: {
+          id: {
+            in: userIds,
+          },
+        },
+      });
+
+      return deleteResult;
+    });
+
+    this.logger.log(`Deleted ${result.count} deactivated users`);
+
+    return { deletedCount: result.count };
   }
 }

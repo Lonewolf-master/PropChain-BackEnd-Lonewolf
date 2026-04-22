@@ -70,6 +70,9 @@ model User {
   role          UserRole  @default(USER)
   isVerified    Boolean   @default(false) @map("is_verified")
   isBlocked     Boolean   @default(false) @map("is_blocked")
+  isDeactivated Boolean   @default(false) @map("is_deactivated")
+  deactivatedAt DateTime? @map("deactivated_at")
+  scheduledDeletionAt DateTime? @map("scheduled_deletion_at")
   twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
   twoFactorSecret  String? @map("two_factor_secret")
   twoFactorBackupCodes String[] @default([]) @map("two_factor_backup_codes")
@@ -89,6 +92,8 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([isDeactivated])
+  @@index([scheduledDeletionAt])
   @@map("users")
 }
 
@@ -152,6 +157,23 @@ model PasswordResetToken {
   @@index([token])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+// Login attempt tracking for rate limiting
+model LoginAttempt {
+  id          String   @id @default(uuid())
+  email       String   // Track by email to prevent enumeration
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  success     Boolean  @default(false)
+  lockedOut   Boolean  @default(false) @map("locked_out")
+  attemptTime DateTime @default(now()) @map("attempt_time")
+  unlockAt    DateTime? @map("unlock_at") // When the account will be auto-unlocked
+
+  @@index([email, attemptTime])
+  @@index([email, lockedOut])
+  @@index([unlockAt])
+  @@map("login_attempts")
 }
 
 // Property model
