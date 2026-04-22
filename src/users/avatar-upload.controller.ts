@@ -112,8 +112,14 @@ export class AvatarUploadController {
 
     try {
       const user = await this.usersService.findOne(req.user.id);
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
       return { avatarUrl: user.avatar || undefined };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new NotFoundException('User not found');
     }
   }
