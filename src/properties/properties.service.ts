@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
+
+interface FindAllParams {
+  skip?: number;
+  take?: number;
+  where?: Record<string, unknown>;
+  orderBy?: Record<string, 'asc' | 'desc'>;
+}
 
 @Injectable()
 export class PropertiesService {
@@ -24,12 +30,7 @@ export class PropertiesService {
     });
   }
 
-  async findAll(params?: {
-    skip?: number;
-    take?: number;
-    where?: Prisma.PropertyWhereInput;
-    orderBy?: Prisma.PropertyOrderByWithRelationInput;
-  }) {
+  async findAll(params?: FindAllParams) {
     const { skip, take, where, orderBy } = params || {};
     return this.prisma.property.findMany({
       skip,

@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiKey, Prisma, TokenType, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../database/prisma.service';
@@ -172,7 +172,7 @@ export class AuthService {
 
     await this.blacklistToken({
       jti: payload.jti,
-      tokenType: TokenType.REFRESH,
+      tokenType: 'REFRESH',
       expiresAt: new Date((payload.exp ?? 0) * 1000),
       userId: user.id,
     });
@@ -189,7 +189,7 @@ export class AuthService {
       const accessPayload = this.verifyToken(accessToken, this.jwtSecret) as JwtPayload;
       await this.blacklistToken({
         jti: accessPayload.jti,
-        tokenType: TokenType.ACCESS,
+        tokenType: 'ACCESS',
         expiresAt: new Date((accessPayload.exp ?? 0) * 1000),
         userId: user.sub,
       });
@@ -203,7 +203,7 @@ export class AuthService {
 
       await this.blacklistToken({
         jti: refreshPayload.jti,
-        tokenType: TokenType.REFRESH,
+        tokenType: 'REFRESH',
         expiresAt: new Date((refreshPayload.exp ?? 0) * 1000),
         userId: user.sub,
       });
@@ -410,7 +410,7 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return apiKeys.map((apiKey: ApiKey) => this.toApiKeyResponse(apiKey));
+    return apiKeys.map((apiKey: any) => this.toApiKeyResponse(apiKey));
   }
 
   async rotateApiKey(user: AuthUserPayload, apiKeyId: string) {
@@ -506,7 +506,7 @@ export class AuthService {
     };
   }
 
-  private async issueTokenPair(user: User) {
+  private async issueTokenPair(user: any) {
     const accessJti = randomUUID();
     const refreshJti = randomUUID();
 
@@ -569,7 +569,7 @@ export class AuthService {
 
   private async blacklistToken(data: {
     jti: string;
-    tokenType: TokenType;
+    tokenType: 'ACCESS' | 'REFRESH';
     expiresAt: Date;
     userId?: string;
   }) {
@@ -588,7 +588,7 @@ export class AuthService {
     return `pc_${randomToken(24)}`;
   }
 
-  private toApiKeyResponse(apiKey: ApiKey) {
+  private toApiKeyResponse(apiKey: any) {
     return {
       id: apiKey.id,
       name: apiKey.name,
