@@ -108,6 +108,7 @@ model User {
   blacklistedTokens BlacklistedToken[]
   preferences   UserPreferences?
   activityLogs  ActivityLog[]
+  verificationDocuments VerificationDocument[]
   sessions      Session[]
   passwordResetTokens PasswordResetToken[]
   loginHistory  LoginHistory[]
@@ -376,4 +377,28 @@ model Session {
   @@index([expiresAt])
   @@index([isRevoked])
   @@map("sessions")
+}
+
+// Verification Document model
+model VerificationDocument {
+  id              String            @id @default(uuid())
+  userId          String            @map("user_id")
+  documentType    String            @map("document_type") // ID_CARD, PASSPORT, DRIVER_LICENSE, PROOF_OF_ADDRESS, etc.
+  fileName        String            @map("file_name")
+  fileUrl         String            @map("file_url")
+  fileSize        Int               @map("file_size") // in bytes
+  mimeType        String            @map("mime_type")
+  status          VerificationStatus @default(PENDING)
+  adminNotes      String?           @map("admin_notes")
+  reviewedBy      String?           @map("reviewed_by")
+  reviewedAt      DateTime?         @map("reviewed_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([documentType])
+  @@map("verification_documents")
 }
