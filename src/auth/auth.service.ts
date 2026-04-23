@@ -210,6 +210,7 @@ export class AuthService {
 
     // Record successful login
     await this.rateLimitService.recordSuccessfulAttempt(data.email, ipAddress, userAgent);
+    await this.recordLoginHistory(user.id, ipAddress, userAgent);
 
     const tokens = await this.issueTokenPair(user);
     return {
@@ -1168,5 +1169,15 @@ export class AuthService {
       remainingLockoutMinutes: lockoutInfo.remainingLockoutMinutes,
       canAttemptLogin: !lockoutInfo.isLocked,
     };
+  }
+
+  private async recordLoginHistory(userId: string, ipAddress?: string, userAgent?: string) {
+    await this.prisma.loginHistory.create({
+      data: {
+        userId,
+        ipAddress,
+        userAgent,
+      },
+    });
   }
 }
