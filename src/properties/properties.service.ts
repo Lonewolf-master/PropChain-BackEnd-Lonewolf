@@ -33,9 +33,6 @@ type SearchQuery = {
   take?: number;
 };
 
-type WhereCondition = Record<string, any>;
-type IncludeCondition = Record<string, any>;
-
 @Injectable({ scope: Scope.DEFAULT })
 export class PropertiesService {
   private readonly logger = new Logger(PropertiesService.name);
@@ -110,7 +107,10 @@ export class PropertiesService {
   @UseInterceptors(CacheInterceptor)
   @CacheKey('search')
   @CacheTTL(300)
-  async cachedSearch(@Inject(REQUEST) req: unknown, criteria: SearchCriteriaDto): Promise<PaginatedSearchResponse> {
+  async cachedSearch(
+    @Inject(REQUEST) req: unknown,
+    criteria: SearchCriteriaDto,
+  ): Promise<PaginatedSearchResponse> {
     return this.search(criteria);
   }
 
@@ -323,10 +323,9 @@ export class PropertiesService {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
-    return hash.toString(36);
   }
 
   /**
@@ -345,34 +344,36 @@ export class PropertiesService {
   /**
    * Map Prisma results to DTO
    */
-  private mapToSearchResultItem(properties: Array<{
-    id: string;
-    title: string;
-    description?: string | null;
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-    price: string | number | bigint;
-    propertyType: string;
-    bedrooms?: number | null;
-    bathrooms?: string | number | bigint | null;
-    squareFeet?: string | number | bigint | null;
-    lotSize?: string | number | bigint | null;
-    yearBuilt?: number | null;
-    features?: string[] | null;
-    latitude?: number | null;
-    longitude?: number | null;
-    status: string;
-    createdAt: Date | string;
-    owner?: {
+  private mapToSearchResultItem(
+    properties: Array<{
       id: string;
-      firstName: string;
-      lastName: string;
-      email: string;
-    } | null;
-  }>): SearchResultItem[] {
+      title: string;
+      description?: string | null;
+      address: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      country: string;
+      price: string | number | bigint;
+      propertyType: string;
+      bedrooms?: number | null;
+      bathrooms?: string | number | bigint | null;
+      squareFeet?: string | number | bigint | null;
+      lotSize?: string | number | bigint | null;
+      yearBuilt?: number | null;
+      features?: string[] | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      status: string;
+      createdAt: Date | string;
+      owner?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      } | null;
+    }>,
+  ): SearchResultItem[] {
     return properties.map((prop) => ({
       id: prop.id,
       title: prop.title,
@@ -390,18 +391,18 @@ export class PropertiesService {
       lotSize: parseFloat(prop.lotSize?.toString() || '0'),
       yearBuilt: prop.yearBuilt ?? undefined,
       features: prop.features || undefined,
-      location: (prop.latitude && prop.longitude) ? [prop.longitude, prop.latitude] : undefined,
+      location: prop.latitude && prop.longitude ? [prop.longitude, prop.latitude] : undefined,
       status: prop.status,
       createdAt: prop.createdAt,
-      owner: prop.owner ? {
-        id: prop.owner.id,
-        firstName: prop.owner.firstName,
-        lastName: prop.owner.lastName,
-        email: prop.owner.email,
-      } : undefined,
+      owner: prop.owner
+        ? {
+            id: prop.owner.id,
+            firstName: prop.owner.firstName,
+            lastName: prop.owner.lastName,
+            email: prop.owner.email,
+          }
+        : undefined,
     }));
-  }
-    return hash.toString(36);
   }
 
   /**
@@ -417,70 +418,40 @@ export class PropertiesService {
     return filters;
   }
 
-  /**
-   * Map Prisma results to DTO
-   */
-  private mapToSearchResultItem(properties: any[]): SearchResultItem[] {
-    return properties.map((prop) => ({
-      id: prop.id,
-      title: prop.title,
-      description: prop.description,
-      address: prop.address,
-      city: prop.city,
-      state: prop.state,
-      zipCode: prop.zipCode,
-      country: prop.country,
-      price: parseFloat(prop.price.toString()),
-      propertyType: prop.propertyType,
-      bedrooms: prop.bedrooms,
-      bathrooms: parseFloat(prop.bathrooms?.toString() || '0'),
-      squareFeet: parseFloat(prop.squareFeet?.toString() || '0'),
-      lotSize: parseFloat(prop.lotSize?.toString() || '0'),
-      yearBuilt: prop.yearBuilt,
-      features: prop.features,
-      location: prop.latitude && prop.longitude ? [prop.longitude, prop.latitude] : undefined,
-      status: prop.status,
-      createdAt: prop.createdAt,
-      owner: prop.owner
-        ? {
-            id: prop.owner.id,
-            firstName: prop.owner.firstName,
-            lastName: prop.owner.lastName,
-            email: prop.owner.email,
-          }
-        : undefined,
-    }));
-  }
-
   // ==================== Existing Methods ====================
 
-   async create(createPropertyDto: CreatePropertyDto, ownerId: string) {
-     const { price, squareFeet, lotSize, ...rest } = createPropertyDto;
+  async create(createPropertyDto: CreatePropertyDto, ownerId: string) {
+    const { price, squareFeet, lotSize, ...rest } = createPropertyDto;
 
-     return this.prisma.property.create({
-       data: {
-         ...rest,
-         price: new Decimal(price.toString()),
-         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : null,
-         lotSize: lotSize ? new Decimal(lotSize.toString()) : null,
-         owner: {
-           connect: { id: ownerId },
-         },
-       },
-       include: {
-         owner: {
-           select: {
-             id: true,
-             firstName: true,
-             lastName: true,
-             email: true,
-           },
-         },
-       },
-     });
-   }
+    return this.prisma.property.create({
+      data: {
+        ...rest,
+        price: new Decimal(price.toString()),
+        squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : null,
+        lotSize: lotSize ? new Decimal(lotSize.toString()) : null,
+        owner: {
+          connect: { id: ownerId },
+        },
+      },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
 
-  async findAll(params?: { skip?: number; take?: number; where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'> }) {
+  async findAll(params?: {
+    skip?: number;
+    take?: number;
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+  }) {
     const { skip, take, where, orderBy } = params || {};
     return this.prisma.property.findMany({
       skip,
@@ -517,19 +488,19 @@ export class PropertiesService {
     });
   }
 
-   async update(id: string, updatePropertyDto: UpdatePropertyDto) {
-     const { price, squareFeet, lotSize, ...rest } = updatePropertyDto;
+  async update(id: string, updatePropertyDto: UpdatePropertyDto) {
+    const { price, squareFeet, lotSize, ...rest } = updatePropertyDto;
 
-     return this.prisma.property.update({
-       where: { id },
-       data: {
-         ...rest,
-         price: price ? new Decimal(price.toString()) : undefined,
-         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : undefined,
-         lotSize: lotSize ? new Decimal(lotSize.toString()) : undefined,
-       },
-     });
-   }
+    return this.prisma.property.update({
+      where: { id },
+      data: {
+        ...rest,
+        price: price ? new Decimal(price.toString()) : undefined,
+        squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : undefined,
+        lotSize: lotSize ? new Decimal(lotSize.toString()) : undefined,
+      },
+    });
+  }
 
   async remove(id: string) {
     return this.prisma.property.delete({

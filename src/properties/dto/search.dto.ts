@@ -8,9 +8,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { InputType, Field, Float, ID, Int } from '@nestjs/graphql';
-import { Type } from 'class-transformer';
-import { ValidateIf } from 'class-validator';
+import { InputType, Field, Float, ID } from '@nestjs/graphql';
 
 // Sort fields and directions
 export const PROPERTY_SORT_FIELDS = [

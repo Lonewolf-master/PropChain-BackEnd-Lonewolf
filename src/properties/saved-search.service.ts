@@ -116,8 +116,8 @@ export class SavedSearchAlertService {
 
     // Order by date
     const sortOptions = criteria?.sort || { field: 'createdAt', direction: 'desc' };
-    const orderBy: Record<string, 'asc' | 'desc'> = { 
-      [sortOptions.field || 'createdAt']: sortOptions.direction || 'desc' 
+    const orderBy: Record<string, 'asc' | 'desc'> = {
+      [sortOptions.field || 'createdAt']: sortOptions.direction || 'desc',
     };
 
     // Fetch new properties
@@ -393,7 +393,11 @@ export class SavedSearchService {
   /**
    * Update saved search
    */
-  async update(id: string, updateDto: UpdateSavedSearchDto, userId: string): Promise<SavedSearchResponse> {
+  async update(
+    id: string,
+    updateDto: UpdateSavedSearchDto,
+    userId: string,
+  ): Promise<SavedSearchResponse> {
     const existing = await this.findById(id, userId);
     if (!existing) {
       throw new Error('Saved search not found');

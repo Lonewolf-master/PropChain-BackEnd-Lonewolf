@@ -1,6 +1,5 @@
-import { Resolver, Query, Mutation, Args, Subscription } from '@nestjs/graphql';
-import { UseGuards, Inject } from '@nestjs/common';
-import { PubSub } from 'graphql-subscriptions';
+import { Resolver, Query, Mutation, Args, Subscription, Inject } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { Property } from './models/property.model';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
