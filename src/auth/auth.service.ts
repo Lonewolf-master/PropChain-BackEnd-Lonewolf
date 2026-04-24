@@ -101,26 +101,26 @@ export class AuthService {
     this.bcryptRounds = parseInt(this.configService.get<string>('BCRYPT_ROUNDS') ?? '12', 10);
   }
 
-  /**
-   * Helper to map transactions to activity items for dashboard
-   */
-  private transactionsToActivityItems(
-    transactions: Array<{
-      id: string;
-      property: { title?: string };
-      amount: string | number | bigint;
-      createdAt: Date | string;
-    }>,
-    type: 'purchase' | 'sale',
-  ) {
-    return transactions.map((tx) => ({
-      type: 'transaction' as const,
-      id: tx.id,
-      title: `Property ${type === 'purchase' ? 'Purchased' : 'Sold'}: ${tx.property?.title || 'Unknown'}`,
-      description: `${type === 'purchase' ? 'Bought' : 'Sold'} for $${tx.amount}`,
-      timestamp: tx.createdAt,
-    }));
-  }
+   /**
+    * Helper to map transactions to activity items for dashboard
+    */
+   private transactionsToActivityItems(
+     transactions: Array<{
+       id: string;
+       property: { title?: string };
+       amount: string | number | bigint | { toString(): string };
+       createdAt: Date | string;
+     }>,
+     type: 'purchase' | 'sale',
+   ) {
+     return transactions.map((tx) => ({
+       type: 'transaction' as const,
+       id: tx.id,
+       title: `Property ${type === 'purchase' ? 'Purchased' : 'Sold'}: ${tx.property?.title || 'Unknown'}`,
+       description: `${type === 'purchase' ? 'Bought' : 'Sold'} for $${typeof tx.amount === 'object' && tx.amount !== null ? (tx.amount as { toString(): string }).toString() : tx.amount}`,
+       timestamp: tx.createdAt,
+     }));
+   }
 
   async register(data: RegisterDto) {
     const existingUser = await this.usersService.findByEmail(data.email);

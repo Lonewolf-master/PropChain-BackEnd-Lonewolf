@@ -1,300 +1,18 @@
-import { Injectable, Logger, Cron, CronExpression } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { CreateSavedSearchDto, UpdateSavedSearchDto } from './dto/saved-search.dto';
-
-@Injectable()
-export class SavedSearchAlertService {
-  private readonly logger = new Logger(SavedSearchAlertService.name);
-
-  constructor(private prisma: PrismaService) {}
-
-  /**
-   * Find new properties matching a saved search since last run
-   */
-  async findNewMatches(savedSearchId: string): Promise<{
-    savedSearchId: string;
-    newMatches: Array<{
-      id: string;
-      title: string;
-      description?: string | null;
-      address: string;
-      city: string;
-      state: string;
-      price: string | number | bigint;
-      propertyType: string;
-      status: string;
-      createdAt: Date | string;
-      owner?: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-      };
-    }>;
-    totalMatches: number;
-  }> {
-    const savedSearch = await this.prisma.savedSearch.findUnique({
-      where: { id: savedSearchId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
-
-    if (!savedSearch || !savedSearch.isActive) {
-      return { savedSearchId, newMatches: [], totalMatches: 0 };
-    }
-
-    // Build query from saved criteria
-    const criteria = savedSearch.criteria as any;
-    const filters = criteria?.filters || {};
-
-    // Build search query
-    const where: Record<string, unknown> = {};
-
-    // Apply filters from saved criteria
-    if (filters.query) {
-      where.OR = [
-        { title: { contains: filters.query, mode: 'insensitive' } },
-        { description: { contains: filters.query, mode: 'insensitive' } },
-        { address: { contains: filters.query, mode: 'insensitive' } },
-        { city: { contains: filters.query, mode: 'insensitive' } },
-      ];
-    }
-    if (filters.cities?.length) where.city = { in: filters.cities };
-    if (filters.states?.length) where.state = { in: filters.states };
-    if (filters.propertyTypes?.length) where.propertyType = { in: filters.propertyTypes };
-    if (filters.status) where.status = filters.status;
-    if (filters.ownerId) where.ownerId = filters.ownerId;
-    if (filters.features?.length) where.features = { hasSome: filters.features };
-
-    // Price range
-    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
-      where.price = {
-        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
-        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
-      };
-    }
-
-    // Bedrooms range
-    if (filters.minBedrooms !== undefined || filters.maxBedrooms !== undefined) {
-      where.bedrooms = {
-        ...(filters.minBedrooms !== undefined && { gte: filters.minBedrooms }),
-        ...(filters.maxBedrooms !== undefined && { lte: filters.maxBedrooms }),
-      };
-    }
-
-    // Bathrooms range
-    if (filters.minBathrooms !== undefined || filters.maxBathrooms !== undefined) {
-      where.bathrooms = {
-        ...(filters.minBathrooms !== undefined && { gte: filters.minBathrooms }),
-        ...(filters.maxBathrooms !== undefined && { lte: filters.maxBathrooms }),
-      };
-    }
-
-    // Square feet range
-    if (filters.minSquareFeet !== undefined || filters.maxSquareFeet !== undefined) {
-      where.squareFeet = {
-        ...(filters.minSquareFeet !== undefined && { gte: filters.minSquareFeet }),
-        ...(filters.maxSquareFeet !== undefined && { lte: filters.maxSquareFeet }),
-      };
-    }
-
-    // Get total count
-    const totalMatches = await this.prisma.property.count({ where });
-
-    // Get only new properties since last run
-    if (savedSearch.lastRunAt) {
-      where.createdAt = { gt: savedSearch.lastRunAt };
-    }
-
-    // Order by date
-    const sortOptions = criteria?.sort || { field: 'createdAt', direction: 'desc' };
-    const orderBy: Record<string, 'asc' | 'desc'> = {
-      [sortOptions.field || 'createdAt']: sortOptions.direction || 'desc',
-    };
-
-    // Fetch new properties
-    const newProperties = await this.prisma.property.findMany({
-      where,
-      orderBy,
-      take: 50, // Limit per run
-      include: {
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    // Update lastRunAt
-    await this.prisma.savedSearch.update({
-      where: { id: savedSearchId },
-      data: { lastRunAt: new Date() },
-    });
-
-    return {
-      savedSearchId,
-      newMatches: newProperties,
-      totalMatches,
-    };
-  }
-
-  /**
-   * Create alerts for new matching properties
-   */
-  async createAlertsForMatches(savedSearchId: string, propertyIds: string[]): Promise<void> {
-    if (propertyIds.length === 0) return;
-
-    // Create alert records
-    const alertRecords = propertyIds.map((propertyId) => ({
-      savedSearchId,
-      propertyId,
-      createdAt: new Date(),
-    }));
-
-    await this.prisma.searchAlert.createMany({
-      data: alertRecords as any,
-      skipDuplicates: true,
-    });
-
-    this.logger.debug(`Created ${propertyIds.length} alerts for saved search ${savedSearchId}`);
-  }
-
-  /**
-   * Mark alerts as notified
-   */
-  async markAlertsAsNotified(alertIds: string[]): Promise<void> {
-    await this.prisma.searchAlert.updateMany({
-      where: { id: { in: alertIds } },
-      data: {
-        notified: true,
-        notifiedAt: new Date(),
-      },
-    });
-  }
-
-  /**
-   * Get un notified alerts for a user
-   */
-  async getUnnotifiedAlerts(userId: string): Promise<any[]> {
-    return this.prisma.searchAlert.findMany({
-      where: {
-        savedSearch: { userId },
-        notified: false,
-      },
-      include: {
-        property: {
-          include: {
-            owner: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        },
-        savedSearch: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  /**
-   * Run all active searches and create alerts
-   * Can be triggered by a cron job
-   */
-  @Cron(CronExpression.EVERY_HOUR)
-  async runDailySearchCheck(): Promise<void> {
-    this.logger.log('Running daily saved search check...');
-
-    // Get all active saved searches with alerts enabled
-    const activeSearches = await this.prisma.savedSearch.findMany({
-      where: {
-        isActive: true,
-        alertEnabled: true,
-      },
-      select: { id: true },
-    });
-
-    for (const savedSearch of activeSearches) {
-      try {
-        const { newMatches } = await this.findNewMatches(savedSearch.id);
-
-        if (newMatches.length > 0) {
-          const propertyIds = newMatches.map((p) => p.id);
-          await this.createAlertsForMatches(savedSearch.id, propertyIds);
-
-          this.logger.log(`Found ${newMatches.length} new matches for search ${savedSearch.id}`);
-        }
-      } catch (error) {
-        this.logger.error(`Error running saved search ${savedSearch.id}:`, error);
-      }
-    }
-
-    this.logger.log('Daily saved search check completed');
-  }
-
-  /**
-   * Get search statistics
-   */
-  async getSearchStats(userId: string): Promise<{
-    totalSearches: number;
-    activeSearches: number;
-    totalAlerts: number;
-    unNotifiedAlerts: number;
-  }> {
-    const [totalSearches, activeSearches, totalAlerts, unNotifiedAlerts] = await Promise.all([
-      this.prisma.savedSearch.count({ where: { userId } }),
-      this.prisma.savedSearch.count({ where: { userId, isActive: true } }),
-      this.prisma.searchAlert.count({
-        where: {
-          savedSearch: { userId },
-        },
-      }),
-      this.prisma.searchAlert.count({
-        where: {
-          savedSearch: { userId },
-          notified: false,
-        },
-      }),
-    ]);
-
-    return {
-      totalSearches,
-      activeSearches,
-      totalAlerts,
-      unNotifiedAlerts,
-    };
-  }
-}
+import { CreateSavedSearchDto, UpdateSavedSearchDto, SavedSearchResponse } from './dto/saved-search.dto';
 
 @Injectable()
 export class SavedSearchService {
   private readonly logger = new Logger(SavedSearchService.name);
 
-  constructor(
-    private prisma: PrismaService,
-    private alertService: SavedSearchAlertService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   /**
    * Create a new saved search
    */
   async create(createDto: CreateSavedSearchDto, userId: string): Promise<SavedSearchResponse> {
-    return this.prisma.savedSearch.create({
+    const result = await (this.prisma as any).savedSearch.create({
       data: {
         name: createDto.name,
         description: createDto.description,
@@ -302,6 +20,7 @@ export class SavedSearchService {
         isActive: true,
         alertEnabled: createDto.alertEnabled ?? true,
         lastRunAt: new Date(),
+        userId,
       },
       include: {
         user: {
@@ -313,14 +32,15 @@ export class SavedSearchService {
           },
         },
       },
-    }) as any; // Cast to any pending proper Prisma types
+    });
+    return result;
   }
 
   /**
    * Get all saved searches for a user
    */
   async findByUser(userId: string, includeAlerts: boolean = false): Promise<SavedSearchResponse[]> {
-    return this.prisma.savedSearch.findMany({
+    const result = await (this.prisma as any).savedSearch.findMany({
       where: { userId },
       include: {
         user: {
@@ -349,19 +69,17 @@ export class SavedSearchService {
         }),
       },
       orderBy: { updatedAt: 'desc' },
-    }) as any[];
+    });
+    return result;
   }
 
   /**
    * Find by ID
    */
   async findById(id: string, userId?: string): Promise<SavedSearchResponse | null> {
-    const where: Record<string, string> = { id };
-    if (userId) {
-      where.userId = userId;
-    }
+    const where = userId ? { id, userId } : { id };
 
-    return this.prisma.savedSearch.findUnique({
+    const result = await (this.prisma as any).savedSearch.findUnique({
       where,
       include: {
         user: {
@@ -387,7 +105,8 @@ export class SavedSearchService {
           },
         },
       },
-    }) as SavedSearchResponse | null;
+    });
+    return result;
   }
 
   /**
@@ -403,9 +122,16 @@ export class SavedSearchService {
       throw new Error('Saved search not found');
     }
 
-    return this.prisma.savedSearch.update({
+    const data: Record<string, any> = {};
+    if (updateDto.name !== undefined) data.name = updateDto.name;
+    if (updateDto.description !== undefined) data.description = updateDto.description;
+    if (updateDto.criteria !== undefined) data.criteria = updateDto.criteria;
+    if (updateDto.isActive !== undefined) data.isActive = updateDto.isActive;
+    if (updateDto.alertEnabled !== undefined) data.alertEnabled = updateDto.alertEnabled;
+
+    const result = await (this.prisma as any).savedSearch.update({
       where: { id, userId },
-      data: updateDto,
+      data,
       include: {
         user: {
           select: {
@@ -416,14 +142,15 @@ export class SavedSearchService {
           },
         },
       },
-    }) as any;
+    });
+    return result;
   }
 
   /**
    * Delete saved search
    */
   async delete(id: string, userId: string): Promise<void> {
-    await this.prisma.savedSearch.deleteMany({
+    await (this.prisma as any).savedSearch.deleteMany({
       where: { id, userId },
     });
   }
@@ -437,13 +164,106 @@ export class SavedSearchService {
       throw new Error('Saved search not found');
     }
 
-    return this.alertService.findNewMatches(searchId);
+    return this.findNewMatches(searchId);
+  }
+
+  /**
+   * Find new properties matching a saved search since last run
+   */
+  private async findNewMatches(savedSearchId: string): Promise<{
+    savedSearchId: string;
+    newMatches: any[];
+    totalMatches: number;
+  }> {
+    const savedSearch = await (this.prisma as any).savedSearch.findUnique({
+      where: { id: savedSearchId },
+    });
+
+    if (!savedSearch || !savedSearch.isActive) {
+      return { savedSearchId, newMatches: [], totalMatches: 0 };
+    }
+
+    // Build query from saved criteria
+    const criteria = savedSearch.criteria as any;
+    const filters = criteria?.filters || {};
+    const where: any = {};
+
+    // Apply filters
+    if (filters.query) {
+      where.OR = [
+        { title: { contains: filters.query, mode: 'insensitive' } },
+        { description: { contains: filters.query, mode: 'insensitive' } },
+        { address: { contains: filters.query, mode: 'insensitive' } },
+        { city: { contains: filters.query, mode: 'insensitive' } },
+      ];
+    }
+    if (filters.cities?.length) where.city = { in: filters.cities };
+    if (filters.states?.length) where.state = { in: filters.states };
+    if (filters.propertyTypes?.length) where.propertyType = { in: filters.propertyTypes };
+    if (filters.status) where.status = filters.status;
+    if (filters.ownerId) where.ownerId = filters.ownerId;
+    if (filters.features?.length) where.features = { hasSome: filters.features };
+
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+      where.price = {
+        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
+        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
+      };
+    }
+
+    if (filters.minBedrooms !== undefined || filters.maxBedrooms !== undefined) {
+      where.bedrooms = {
+        ...(filters.minBedrooms !== undefined && { gte: filters.minBedrooms }),
+        ...(filters.maxBedrooms !== undefined && { lte: filters.maxBedrooms }),
+      };
+    }
+
+    // Get total count
+    const totalMatches = await (this.prisma as any).property.count({ where });
+
+    // Get only new properties since last run
+    if (savedSearch.lastRunAt) {
+      where.createdAt = { gt: savedSearch.lastRunAt };
+    }
+
+    // Order by date
+    const sortOptions = criteria?.sort || { field: 'createdAt', direction: 'desc' };
+    const orderBy: any = { [sortOptions.field || 'createdAt']: sortOptions.direction || 'desc' };
+
+    // Fetch new properties
+    const newProperties = await (this.prisma as any).property.findMany({
+      where,
+      orderBy,
+      take: 50,
+      include: {
+        owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Update lastRunAt
+    await (this.prisma as any).savedSearch.update({
+      where: { id: savedSearchId },
+      data: { lastRunAt: new Date() },
+    });
+
+    return {
+      savedSearchId,
+      newMatches: newProperties,
+      totalMatches,
+    };
   }
 
   /**
    * Duplicate a saved search
    */
-  async duplicate(id: string, userId: string, newName?: string): Promise<any> {
+  async duplicate(id: string, userId: string, newName?: string): Promise<SavedSearchResponse> {
     const original = await this.findById(id, userId);
     if (!original) {
       throw new Error('Saved search not found');
@@ -458,5 +278,119 @@ export class SavedSearchService {
       },
       userId,
     );
+  }
+}
+
+// Forward declaration - the actual alert service will be in same file
+@Injectable()
+export class SavedSearchAlertService {
+  private readonly logger = new Logger(SavedSearchAlertService.name);
+
+  constructor(private prisma: PrismaService) {}
+
+  /**
+   * Find new properties matching a saved search since last run
+   */
+  async findNewMatches(savedSearchId: string): Promise<{
+    savedSearchId: string;
+    newMatches: any[];
+    totalMatches: number;
+  }> {
+    const savedSearch = await (this.prisma as any).savedSearch.findUnique({
+      where: { id: savedSearchId },
+    });
+
+    if (!savedSearch || !savedSearch.isActive) {
+      return { savedSearchId, newMatches: [], totalMatches: 0 };
+    }
+
+    const criteria = savedSearch.criteria as any;
+    const filters = criteria?.filters || {};
+    const where: any = {};
+
+    if (filters.query) {
+      where.OR = [
+        { title: { contains: filters.query, mode: 'insensitive' } },
+        { description: { contains: filters.query, mode: 'insensitive' } },
+        { address: { contains: filters.query, mode: 'insensitive' } },
+        { city: { contains: filters.query, mode: 'insensitive' } },
+      ];
+    }
+    if (filters.cities?.length) where.city = { in: filters.cities };
+    if (filters.states?.length) where.state = { in: filters.states };
+    if (filters.propertyTypes?.length) where.propertyType = { in: filters.propertyTypes };
+    if (filters.status) where.status = filters.status;
+    if (filters.ownerId) where.ownerId = filters.ownerId;
+    if (filters.features?.length) where.features = { hasSome: filters.features };
+
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+      where.price = {
+        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
+        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
+      };
+    }
+
+    if (filters.minBedrooms !== undefined || filters.maxBedrooms !== undefined) {
+      where.bedrooms = {
+        ...(filters.minBedrooms !== undefined && { gte: filters.minBedrooms }),
+        ...(filters.maxBedrooms !== undefined && { lte: filters.maxBedrooms }),
+      };
+    }
+
+    const totalMatches = await (this.prisma as any).property.count({ where });
+
+    if (savedSearch.lastRunAt) {
+      where.createdAt = { gt: savedSearch.lastRunAt };
+    }
+
+    const sortOptions = criteria?.sort || { field: 'createdAt', direction: 'desc' };
+    const orderBy: any = { [sortOptions.field || 'createdAt']: sortOptions.direction || 'desc' };
+
+    const newProperties = await (this.prisma as any).property.findMany({
+      where,
+      orderBy,
+      take: 50,
+      include: {
+        owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    await (this.prisma as any).savedSearch.update({
+      where: { id: savedSearchId },
+      data: { lastRunAt: new Date() },
+    });
+
+    return {
+      savedSearchId,
+      newMatches: newProperties,
+      totalMatches,
+    };
+  }
+
+  /**
+   * Create alerts for new matching properties
+   */
+  async createAlertsForMatches(savedSearchId: string, propertyIds: string[]): Promise<void> {
+    if (propertyIds.length === 0) return;
+
+    const alertRecords = propertyIds.map((propertyId) => ({
+      savedSearchId,
+      propertyId,
+      createdAt: new Date(),
+    }));
+
+    await (this.prisma as any).searchAlert.createMany({
+      data: alertRecords,
+      skipDuplicates: true,
+    });
+
+    this.logger.debug(`Created ${propertyIds.length} alerts for saved search ${savedSearchId}`);
   }
 }

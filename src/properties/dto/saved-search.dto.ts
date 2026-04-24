@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsBoolean, IsObject } from 'class-validator';
 import { InputType, Field, ID, Int } from '@nestjs/graphql';
+import { SearchResultItem } from './search.dto';
 
 @InputType()
 export class CreateSavedSearchDto {

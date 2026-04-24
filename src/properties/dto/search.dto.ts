@@ -1,53 +1,30 @@
-import {
-  IsOptional,
-  IsNumber,
-  IsString,
-  IsBoolean,
-  IsArray,
-  IsIn,
-  Min,
-  Max,
-} from 'class-validator';
-import { InputType, Field, Float, ID } from '@nestjs/graphql';
+import { IsOptional, IsNumber, IsString, IsBoolean, IsArray, IsIn, Min, Max } from 'class-validator';
+import { InputType, Field, Float } from '@nestjs/graphql';
 
-// Sort fields and directions
-export const PROPERTY_SORT_FIELDS = [
-  'price',
-  'createdAt',
-  'squareFeet',
-  'bedrooms',
-  'bathrooms',
-  'yearBuilt',
-] as const;
+// Sort fields (as string literals for GraphQL enum)
+export const PROPERTY_SORT_FIELDS = ['price', 'createdAt', 'squareFeet', 'bedrooms', 'bathrooms', 'yearBuilt'];
+export const SORT_DIRECTION = ['asc', 'desc'];
 
-export const SORT_DIRECTION = ['asc', 'desc'] as const;
-
-export type PropertySortField = (typeof PROPERTY_SORT_FIELDS)[number];
-export type SortDirection = (typeof SORT_DIRECTION)[number];
+export type PropertySortField = 'price' | 'createdAt' | 'squareFeet' | 'bedrooms' | 'bathrooms' | 'yearBuilt';
+export type SortDirection = 'asc' | 'desc';
 
 @InputType()
 export class PropertySearchFilters {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
-  query?: string; // Full-text search across title, description, address, city
+  query?: string;
 
   @Field(() => [String], { nullable: true })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   cities?: string[];
 
   @Field(() => [String], { nullable: true })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   states?: string[];
 
   @Field(() => [String], { nullable: true })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   propertyTypes?: string[];
 
   @Field({ nullable: true })
@@ -92,59 +69,17 @@ export class PropertySearchFilters {
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsNumber()
-  minLotSize?: number;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsNumber()
-  maxLotSize?: number;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsNumber()
-  minYearBuilt?: number;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsNumber()
-  maxYearBuilt?: number;
-
-  @Field({ nullable: true })
-  @IsOptional()
   @IsString()
   status?: string;
-
-  @Field(() => [Float], { nullable: true })
-  @IsOptional()
-  @IsArray()
-  geoLocation?: [number, number]; // [longitude, latitude]
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsNumber()
-  radius?: number; // Radius in kilometers for geo search
-
-  @Field(() => [String], { nullable: true })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  features?: string[];
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
   ownerId?: string;
 
-  @Field({ nullable: true })
+  @Field(() => [String], { nullable: true })
   @IsOptional()
-  @IsBoolean()
-  hasPhotos?: boolean;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsBoolean()
-  isVerified?: boolean;
+  features?: string[];
 }
 
 @InputType()
@@ -164,11 +99,11 @@ export class CursorPaginationInput {
 
 @InputType()
 export class SearchSortOptions {
-  @Field(() => PropertySortField, { nullable: true })
+  @Field({ nullable: true })
   @IsOptional()
   field?: PropertySortField;
 
-  @Field(() => SortDirection, { nullable: true })
+  @Field({ nullable: true })
   @IsOptional()
   @IsIn(SORT_DIRECTION)
   direction?: SortDirection = 'desc';
@@ -198,10 +133,9 @@ export class SearchCriteriaDto {
   cacheResults?: boolean = true;
 }
 
-// Response DTOs
 @InputType()
 export class SearchResultItem {
-  @Field(() => ID)
+  @Field(() => Float)
   id: string;
 
   @Field()
@@ -240,9 +174,6 @@ export class SearchResultItem {
   @Field(() => Float, { nullable: true })
   squareFeet?: number;
 
-  @Field(() => Float, { nullable: true })
-  lotSize?: number;
-
   @Field({ nullable: true })
   yearBuilt?: number;
 
@@ -276,11 +207,9 @@ export class PaginatedSearchResponse {
   hasNextPage: boolean;
 
   @Field({ nullable: true })
-  @IsOptional()
   nextCursor?: string;
 
   @Field({ nullable: true })
-  @IsOptional()
   totalCount?: number;
 
   @Field()
@@ -288,4 +217,39 @@ export class PaginatedSearchResponse {
     limit: number;
     offset: number;
   };
+}
+
+// Auxiliary DTOs for internal use
+export interface PropertyInclude {
+  owner?: {
+    select: {
+      id: boolean;
+      firstName: boolean;
+      lastName: boolean;
+      email: boolean;
+    };
+  };
+}
+
+export interface PropertyWhere {
+  AND?: any[];
+  OR?: any[];
+  id?: string;
+  title?: { contains: string; mode: string };
+  description?: { contains: string; mode: string };
+  city?: { in: string[] } | string;
+  state?: { in: string[] } | string;
+  propertyType?: { in: string[] } | string;
+  price?: { gte: number; lte: number } | number;
+  bedrooms?: { gte: number; lte: number } | number;
+  bathrooms?: { gte: number; lte: number } | number;
+  squareFeet?: { gte: number; lte: number } | number;
+  status?: string;
+  ownerId?: string;
+  features?: { hasSome: string[] };
+  createdAt?: { gt: Date };
+}
+
+export interface PropertyOrderBy {
+  [key: string]: 'asc' | 'desc';
 }

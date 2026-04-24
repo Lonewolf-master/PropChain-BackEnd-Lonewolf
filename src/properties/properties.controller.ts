@@ -46,7 +46,7 @@ export class PropertiesController {
     @Query() criteria: SearchCriteriaDto,
     @CurrentUser() _user: AuthUserPayload,
   ): Promise<PaginatedSearchResponse> {
-    return this.propertiesService.cachedSearch(null, criteria);
+    return this.propertiesService.cachedSearch(criteria);
   }
 
   // ==================== Saved Search Endpoints ====================
@@ -143,8 +143,8 @@ export class PropertiesController {
   @UseGuards(JwtAuthGuard)
   async duplicateSavedSearch(
     @Param('id') id: string,
-    @Query('name') name?: string,
     @CurrentUser() user: AuthUserPayload,
+    @Query('name') name?: string,
   ): Promise<SavedSearchResponse> {
     return this.savedSearchService.duplicate(id, user.sub, name);
   }
