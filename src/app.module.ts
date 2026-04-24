@@ -11,6 +11,8 @@ import { PrismaModule } from './database/prisma.module';
 import { VersioningModule } from './versioning/versioning.module';
 import { ApiDocumentationModule } from './config/api-documentation.module';
 import { CacheModuleConfig } from './cache/cache.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { AppController } from './app.controller';
 import { AdminModule } from './admin/admin.module';
 
@@ -21,6 +23,7 @@ import { AdminModule } from './admin/admin.module';
       envFilePath: ['.env.local', '.env'],
     }),
     CacheModuleConfig,
+    AnalyticsModule,
     PrismaModule,
     VersioningModule,
     ApiDocumentationModule,
@@ -32,6 +35,7 @@ import { AdminModule } from './admin/admin.module';
     PropertiesModule,
     AdminModule,
     DocumentsModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
 })

@@ -24,20 +24,25 @@ export class AdminService {
         this.prisma.property.count({ where: { status: PropertyStatus.ACTIVE } }),
       ]);
 
-    const [completedTransactions, pendingTransactions, failedTransactions, salesAggregate, rentAggregate] =
-      await Promise.all([
-        this.prisma.transaction.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.transaction.count({ where: { status: 'PENDING' } }),
-        this.prisma.transaction.count({ where: { status: 'FAILED' } }),
-        this.prisma.transaction.aggregate({
-          where: { status: 'COMPLETED', type: 'SALE' },
-          _sum: { amount: true },
-        }),
-        this.prisma.transaction.aggregate({
-          where: { status: 'COMPLETED', type: 'TRANSFER' },
-          _sum: { amount: true },
-        }),
-      ]);
+    const [
+      completedTransactions,
+      pendingTransactions,
+      failedTransactions,
+      salesAggregate,
+      rentAggregate,
+    ] = await Promise.all([
+      this.prisma.transaction.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.transaction.count({ where: { status: 'PENDING' } }),
+      this.prisma.transaction.count({ where: { status: 'FAILED' } }),
+      this.prisma.transaction.aggregate({
+        where: { status: 'COMPLETED', type: 'SALE' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { status: 'COMPLETED', type: 'TRANSFER' },
+        _sum: { amount: true },
+      }),
+    ]);
 
     return {
       userStats: {
@@ -198,7 +203,9 @@ export class AdminService {
 
   async bulkModerate(payload: BulkModerationDto) {
     const status =
-      payload.action === BulkModerationAction.APPROVE ? PropertyStatus.ACTIVE : PropertyStatus.ARCHIVED;
+      payload.action === BulkModerationAction.APPROVE
+        ? PropertyStatus.ACTIVE
+        : PropertyStatus.ARCHIVED;
 
     const result = await this.prisma.property.updateMany({
       where: { id: { in: payload.propertyIds } },

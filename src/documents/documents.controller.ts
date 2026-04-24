@@ -39,10 +39,7 @@ export class DocumentsController {
   }
 
   @Get()
-  findAll(
-    @CurrentUser() user: AuthUserPayload,
-    @Query() filter: FilterDocumentsDto,
-  ) {
+  findAll(@CurrentUser() user: AuthUserPayload, @Query() filter: FilterDocumentsDto) {
     return this.documentsService.findAll(user.sub, filter);
   }
 

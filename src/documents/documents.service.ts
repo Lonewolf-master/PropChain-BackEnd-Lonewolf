@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as archiver from 'archiver';
 import { Response } from 'express';
@@ -171,20 +167,16 @@ export class DocumentsService {
     if (!docs.length) throw new NotFoundException('No documents found');
 
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="documents-${Date.now()}.zip"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="documents-${Date.now()}.zip"`);
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     archive.pipe(res);
 
     for (const doc of docs) {
       // Append file URL as a reference entry (actual file streaming requires storage integration)
-      archive.append(
-        `File: ${doc.fileName}\nURL: ${doc.fileUrl}\nType: ${doc.documentType}\n`,
-        { name: `${doc.id}-${doc.fileName}.txt` },
-      );
+      archive.append(`File: ${doc.fileName}\nURL: ${doc.fileUrl}\nType: ${doc.documentType}\n`, {
+        name: `${doc.id}-${doc.fileName}.txt`,
+      });
     }
 
     await archive.finalize();

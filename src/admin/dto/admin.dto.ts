@@ -1,6 +1,21 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
-import { PropertyStatus, TransactionStatus, TransactionType, UserRole } from '../../types/prisma.types';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
+import {
+  PropertyStatus,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+} from '../../types/prisma.types';
 
 export class AdminUsersQueryDto {
   @IsOptional()

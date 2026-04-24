@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsArray,
-  IsDateString,
-  IsBoolean,
-  IsIn,
-} from 'class-validator';
+import { IsString, IsOptional, IsArray, IsDateString, IsBoolean, IsIn } from 'class-validator';
 
 export const DOCUMENT_TYPE_ENUM = [
   'TITLE_DEED',
