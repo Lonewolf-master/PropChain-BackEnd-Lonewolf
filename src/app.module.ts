@@ -10,6 +10,9 @@ import { SessionsModule } from './sessions/sessions.module';
 import { TrustScoreModule } from './trust-score/trust-score.module';
 import { PropertiesModule } from './properties/properties.module';
 import { PrismaModule } from './database/prisma.module';
+import { VersioningModule } from './versioning/versioning.module';
+import { ApiDocumentationModule } from './config/api-documentation.module';
+import { CacheModuleConfig } from './cache/cache.module';
 import { AppController } from './app.controller';
 import './common/common.types'; // Load registered enums
 
@@ -28,7 +31,10 @@ import './common/common.types'; // Load registered enums
         'graphql-ws': true,
       },
     }),
+    CacheModuleConfig,
     PrismaModule,
+    VersioningModule,
+    ApiDocumentationModule,
     UsersModule,
     AuthModule,
     DashboardModule,
