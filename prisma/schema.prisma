@@ -99,22 +99,23 @@ model User {
   referralCode             String?   @unique @map("referral_code")
   referredById             String?   @map("referred_by_id")
 
-  // Relations
-  properties            Property[]
-  buyerTransactions     Transaction[]          @relation("BuyerTransactions")
-  sellerTransactions    Transaction[]          @relation("SellerTransactions")
-  documents             Document[]
-  apiKeys               ApiKey[]
-  passwordHistory       PasswordHistory[]
-  blacklistedTokens     BlacklistedToken[]
-  preferences           UserPreferences?
-  activityLogs          ActivityLog[]
-  verificationDocuments VerificationDocument[]
-  sessions              Session[]
-  passwordResetTokens   PasswordResetToken[]
-  loginHistory          LoginHistory[]
-  referrals             User[]                 @relation("Referrals")
-  referredBy            User?                  @relation("Referrals", fields: [referredById], references: [id])
+   // Relations
+   properties            Property[]
+   buyerTransactions     Transaction[]          @relation("BuyerTransactions")
+   sellerTransactions    Transaction[]          @relation("SellerTransactions")
+   documents             Document[]
+   apiKeys               ApiKey[]
+   passwordHistory       PasswordHistory[]
+   blacklistedTokens     BlacklistedToken[]
+   preferences           UserPreferences?
+   activityLogs          ActivityLog[]
+   verificationDocuments VerificationDocument[]
+   sessions              Session[]
+   passwordResetTokens   PasswordResetToken[]
+   loginHistory          LoginHistory[]
+   referrals             User[]                 @relation("Referrals")
+   referredBy            User?                  @relation("Referrals", fields: [referredById], references: [id])
+   savedSearches         SavedSearch[]
 
   @@index([email])
   @@index([role])
@@ -251,17 +252,66 @@ model Property {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  // Relations
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  documents    Document[]
+   // Relations
+   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+   transactions Transaction[]
+   documents    Document[]
+   searchAlerts SearchAlert[]
 
-  @@index([ownerId])
-  @@index([status])
-  @@index([city, state])
-  @@index([price])
-  @@index([propertyType])
-  @@map("properties")
+   @@index([ownerId])
+   @@index([status])
+   @@index([city, state])
+   @@index([price])
+   @@index([propertyType])
+   // Composite indexes for optimized search queries
+   @@index([status, price])
+   @@index([city, state, status])
+   @@index([propertyType, price])
+   @@index([bedrooms, price])
+   @@index([bathrooms, price])
+ @@map("properties")
+ }
+
+// Saved Search model for storing user search criteria
+model SavedSearch {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  name         String   // User-friendly name for the saved search
+  description  String?  @db.Text
+  criteria     Json     // JSON stored search criteria (filters, sort, etc.)
+  isActive     Boolean  @default(true) @map("is_active")
+  alertEnabled Boolean  @default(false) @map("alert_enabled") // Send alerts for new matches
+  lastRunAt    DateTime? @map("last_run_at") // When search was last checked for new results
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alerts SearchAlert[]
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([alertEnabled])
+  @@index([lastRunAt])
+  @@map("saved_searches")
+}
+
+// Search Alert model for tracking new property matches
+model SearchAlert {
+  id             String   @id @default(uuid())
+  savedSearchId  String   @map("saved_search_id")
+  propertyId     String   @map("property_id")
+  notified       Boolean  @default(false)
+  notifiedAt     DateTime? @map("notified_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([savedSearchId])
+  @@index([propertyId])
+  @@index([notified])
+  @@index([createdAt])
+  @@map("search_alerts")
 }
 
 // Transaction model
