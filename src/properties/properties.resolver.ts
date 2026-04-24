@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Subscription, Inject } from '@nestjs/common';
+import { Resolver, Query, Mutation, Args, Subscription, Inject, UseGuards } from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { Property } from './models/property.model';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
@@ -49,3 +49,4 @@ export class PropertiesResolver {
     return this.pubSub.asyncIterator('propertyAdded');
   }
 }
+
