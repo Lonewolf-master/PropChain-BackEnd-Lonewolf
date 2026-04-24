@@ -38,7 +38,7 @@ export class PropertiesService {
     }
 
     // Build order by
-    const orderBy: PropertyOrderBy = { [sortConfig.field]: sortConfig.direction };
+    const orderBy = { [sortConfig.field]: sortConfig.direction };
 
     // Apply cursor pagination
     const { cursor, limit: rawLimit } = pagination || {};
