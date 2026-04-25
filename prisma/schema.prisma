@@ -144,6 +144,9 @@ model User {
   fraudInvestigationNotes FraudInvestigationNote[]
   referrals               User[]                   @relation("Referrals")
   referredBy              User?                    @relation("Referrals", fields: [referredById], references: [id])
+  savedFilters            SavedFilter[]
+  searchAnalytics         SearchAnalytics[]
+  searchHistory           SearchHistory[]
 
   @@index([email])
   @@index([role])
@@ -507,4 +510,95 @@ model VerificationDocument {
   @@index([status])
   @@index([documentType])
   @@map("verification_documents")
+}
+
+// Saved search filters
+model SavedFilter {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  name         String
+  filters      Json     // Store filter configuration as JSON
+  isQuickFilter Boolean @default(false) @map("is_quick_filter")
+  usageCount   Int      @default(0) @map("usage_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isQuickFilter])
+  @@map("saved_filters")
+}
+
+// Search analytics
+model SearchAnalytics {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  queryId     String   @unique @map("query_id")
+  query       String?
+  filters     Json?    // Store applied filters as JSON
+  resultsCount Int     @default(0) @map("results_count")
+  took        Int      @default(0) // Search time in milliseconds
+  hasResults  Boolean  @default(true) @map("has_results")
+  converted   Boolean  @default(false) @map("converted")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([queryId])
+  @@index([createdAt])
+  @@index([hasResults])
+  @@index([converted])
+  @@map("search_analytics")
+}
+
+// Search history for autocomplete
+model SearchHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  query     String
+  frequency Int      @default(1) // How many times this query has been searched
+  lastSearched DateTime @default(now()) @map("last_searched")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, query])
+  @@index([userId])
+  @@index([frequency])
+  @@index([lastSearched])
+  @@map("search_history")
+}
+
+// Popular searches (global)
+model PopularSearch {
+  id        String   @id @default(uuid())
+  query     String   @unique
+  frequency Int      @default(1)
+  trend     String   @default("stable") // up, down, stable
+  lastUpdated DateTime @default(now()) @map("last_updated")
+
+  @@index([frequency])
+  @@index([trend])
+  @@map("popular_searches")
+}
+
+// Search suggestions cache
+model SearchSuggestion {
+  id        String   @id @default(uuid())
+  query     String
+  suggestion String
+  type      String   // property, location, feature, recent, popular
+  score     Float    @default(0) // Relevance score
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([query])
+  @@index([type])
+  @@index([score])
+  @@index([expiresAt])
+  @@map("search_suggestions")
 }
