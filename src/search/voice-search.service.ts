@@ -11,10 +11,7 @@ export class VoiceSearchService {
   private readonly FILLER_WORDS = new Set(['the', 'a', 'an', 'in', 'on', 'at', 'for', 'with']);
 
   process(rawTranscript: string): VoiceSearchResult {
-    const normalised = rawTranscript
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
-      .trim();
+    const normalised = rawTranscript.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
     const tokens = normalised
       .split(/\s+/)
       .filter((word) => word.length > 0 && !this.FILLER_WORDS.has(word));

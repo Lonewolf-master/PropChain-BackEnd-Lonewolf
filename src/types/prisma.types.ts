@@ -110,6 +110,4 @@ export namespace Prisma {
   export interface PropertyWhereInput extends Record<string, any> {}
   export interface PropertyOrderByWithRelationInput extends Record<string, any> {}
   export interface TransactionClient extends Record<string, any> {}
-  export interface SavedSearchWhereInput extends Record<string, any> {}
-  export interface SearchAlertWhereInput extends Record<string, any> {}
 }
