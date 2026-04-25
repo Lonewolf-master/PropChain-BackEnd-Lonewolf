@@ -6,6 +6,8 @@ export interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  userId?: string;
+  emailType?: string;
 }
 
 export interface FraudAlertEmailPayload {
@@ -17,9 +19,17 @@ export interface FraudAlertEmailPayload {
   userEmail?: string | null;
 }
 
+import { PrismaService } from '../database/prisma.service';
+import { TrackingService } from '../tracking/tracking.service';
+import { v4 as uuidv4 } from 'uuid';
+
 @Injectable()
 export class EmailService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly trackingService: TrackingService,
+  ) {}
 
   async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
     const resetUrl = `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000')}/reset-password?token=${resetToken}`;
@@ -120,25 +130,82 @@ Summary: ${payload.description}
     );
   }
 
-  private async sendEmail(options: EmailOptions): Promise<void> {
-    // For now, we'll just log the email. In production, you would integrate with
-    // an email service like SendGrid, Mailgun, AWS SES, etc.
+  async handleBounce(
+    email: string,
+    type: 'HARD' | 'SOFT',
+    reason?: string,
+    rawEvent?: any,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return;
 
+    await this.prisma.emailBounce.create({
+      data: {
+        userId: user.id,
+        email,
+        bounceType: type,
+        reason,
+        rawEvent,
+      },
+    });
+
+    if (type === 'HARD') {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailStatus: 'INVALID' },
+      });
+    } else {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailStatus: 'BOUNCED' },
+      });
+    }
+  }
+
+  private async sendEmail(options: EmailOptions): Promise<void> {
+    const baseUrl = this.configService.get<string>('API_URL', 'http://localhost:3000/api');
+    let html = options.html;
+
+    // 1. Check if user is blocked or has invalid email
+    if (options.userId) {
+      const user = await this.prisma.user.findUnique({ where: { id: options.userId } });
+      if (user && (user.isBlocked || user.emailStatus === 'INVALID')) {
+        console.log(`🚫 Skipping email to ${options.to} (User blocked or email invalid)`);
+        return;
+      }
+    }
+
+    // 2. Click Tracking: Rewrite links
+    if (options.userId) {
+      const linkRegex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"([^>]*)>/gi;
+      html = html.replace(linkRegex, (match, url, rest) => {
+        // Only track external links or specific ones if needed
+        if (url.startsWith('http')) {
+          const trackingUrl = `${baseUrl}/track/click?url=${encodeURIComponent(url)}&userId=${options.userId}`;
+          return `<a href="${trackingUrl}"${rest}>`;
+        }
+        return match;
+      });
+    }
+
+    // 3. Open Tracking: Inject pixel
+    if (options.userId && options.emailType) {
+      const trackingId = uuidv4();
+      await this.trackingService.createEmailEngagement(
+        options.userId,
+        options.emailType,
+        trackingId,
+      );
+      const pixelUrl = `${baseUrl}/track/open/${trackingId}.png`;
+      html += `<img src="${pixelUrl}" width="1" height="1" style="display:none;" />`;
+    }
+
+    // For now, we'll just log the email.
     console.log('📧 Sending email:');
     console.log(`To: ${options.to}`);
     console.log(`Subject: ${options.subject}`);
-    console.log(`HTML: ${options.html.substring(0, 200)}...`);
-    console.log(`Text: ${options.text?.substring(0, 200)}...`);
+    console.log(`Tracking enabled: ${!!options.userId}`);
 
-    // TODO: Integrate with actual email service
-    // Example with nodemailer:
-    // const transporter = nodemailer.createTransporter({...});
-    // await transporter.sendMail({
-    //   from: this.configService.get('EMAIL_FROM'),
-    //   to: options.to,
-    //   subject: options.subject,
-    //   html: options.html,
-    //   text: options.text,
-    // });
+    // Actual implementation would go here
   }
 }

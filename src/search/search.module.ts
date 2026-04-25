@@ -11,13 +11,8 @@ import { PrismaModule } from '../database/prisma.module';
 import { CacheModuleConfig } from '../cache/cache.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    CacheModuleConfig,
-  ],
-  controllers: [
-    SearchController,
-  ],
+  imports: [PrismaModule, CacheModuleConfig],
+  controllers: [SearchController],
   providers: [
     SearchService,
     SearchAnalyticsService,

@@ -23,6 +23,8 @@ import { AdminModule } from './admin/admin.module';
 import { FraudModule } from './fraud/fraud.module';
 import { SearchModule } from './search/search.module';
 import { BackupModule } from './backup/backup.module';
+import { TrackingModule } from './tracking/tracking.module';
+import { NotificationsModule } from './notifications/notifications.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -56,6 +58,8 @@ import { BackupModule } from './backup/backup.module';
     IntegrationsModule,
     SearchModule,
     BackupModule,
+    TrackingModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
 })

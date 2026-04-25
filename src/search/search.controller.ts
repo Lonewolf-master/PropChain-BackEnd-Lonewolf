@@ -33,7 +33,7 @@ export class SearchController {
   }
 
   @Get('filters/saved')
-  @ApiOperation({ summary: 'Get user\'s saved filters' })
+  @ApiOperation({ summary: "Get user's saved filters" })
   @ApiResponse({ status: 200, description: 'Saved filters returned successfully' })
   async getSavedFilters(@Request() req: AuthenticatedRequest) {
     return this.searchService.getSavedFilters(req.user.id);

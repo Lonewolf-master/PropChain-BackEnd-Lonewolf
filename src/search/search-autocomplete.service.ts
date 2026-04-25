@@ -10,9 +10,7 @@ export interface Suggestion {
 
 @Injectable()
 export class SearchAutocompleteService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getSuggestions(query: string, limit: number = 10): Promise<string[]> {
     if (!query || query.length < 2) {
@@ -44,7 +42,7 @@ export class SearchAutocompleteService {
     // Sort by relevance and limit
     const sortedSuggestions = this.rankSuggestions(suggestions, query)
       .slice(0, limit)
-      .map(s => s.text);
+      .map((s) => s.text);
 
     return sortedSuggestions;
   }
@@ -62,13 +60,22 @@ export class SearchAutocompleteService {
   }
 
   private async getFeatureSuggestions(query: string, limit: number): Promise<Suggestion[]> {
-    const features = ['pool', 'garage', 'garden', 'balcony', 'fireplace', 'basement', 'patio', 'deck'];
-    
-    const matchingFeatures = features.filter(feature =>
-      feature.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, limit);
+    const features = [
+      'pool',
+      'garage',
+      'garden',
+      'balcony',
+      'fireplace',
+      'basement',
+      'patio',
+      'deck',
+    ];
 
-    return matchingFeatures.map(feature => ({
+    const matchingFeatures = features
+      .filter((feature) => feature.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, limit);
+
+    return matchingFeatures.map((feature) => ({
       text: feature,
       type: 'feature',
     }));
@@ -128,14 +135,14 @@ export class SearchAutocompleteService {
     }
 
     const suggestions = await this.getSuggestions(query);
-    
+
     if (suggestions.length > 0) {
       return suggestions;
     }
 
     // Try common typo corrections
     const corrections = this.getCommonTypoCorrections(query);
-    
+
     for (const correction of corrections) {
       const correctedSuggestions = await this.getSuggestions(correction);
       if (correctedSuggestions.length > 0) {
@@ -148,17 +155,17 @@ export class SearchAutocompleteService {
 
   private getCommonTypoCorrections(query: string): string[] {
     const corrections: string[] = [];
-    
+
     // Common property-related typos
     const typoMap: Record<string, string[]> = {
-      'apartment': ['apartmant', 'apartmet', 'apartmen'],
-      'house': ['hous', 'hose'],
-      'condo': ['condo', 'condo'],
-      'garage': ['garage', 'garage'],
-      'bedroom': ['bedrom', 'bedrum', 'bedroom'],
-      'bathroom': ['bathrom', 'bathrum', 'bathroom'],
-      'pool': ['pol', 'pool'],
-      'garden': ['garden', 'garden'],
+      apartment: ['apartmant', 'apartmet', 'apartmen'],
+      house: ['hous', 'hose'],
+      condo: ['condo', 'condo'],
+      garage: ['garage', 'garage'],
+      bedroom: ['bedrom', 'bedrum', 'bedroom'],
+      bathroom: ['bathrom', 'bathrum', 'bathroom'],
+      pool: ['pol', 'pool'],
+      garden: ['garden', 'garden'],
     };
 
     for (const [correct, typos] of Object.entries(typoMap)) {
@@ -173,7 +180,7 @@ export class SearchAutocompleteService {
         // Swap adjacent characters
         const swapped = query.slice(0, i) + query[i + 1] + query[i] + query.slice(i + 2);
         corrections.push(swapped);
-        
+
         // Delete character
         const deleted = query.slice(0, i) + query.slice(i + 1);
         corrections.push(deleted);

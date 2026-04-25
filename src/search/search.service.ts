@@ -48,10 +48,7 @@ export class SearchService {
     private readonly facetsService: SearchFacetsService,
   ) {}
 
-  async searchProperties(
-    userId: string,
-    searchQuery: SearchQuery,
-  ): Promise<SearchResult<any>> {
+  async searchProperties(userId: string, searchQuery: SearchQuery): Promise<SearchResult<any>> {
     const startTime = Date.now();
     const queryId = await this.analyticsService.recordSearch(userId, searchQuery);
 
@@ -80,10 +77,7 @@ export class SearchService {
 
       // Apply advanced filters
       if (searchQuery.filters) {
-        whereClause = await this.filtersService.applyFilters(
-          whereClause,
-          searchQuery.filters,
-        );
+        whereClause = await this.filtersService.applyFilters(whereClause, searchQuery.filters);
       }
 
       // Execute query with sorting and pagination
@@ -105,9 +99,7 @@ export class SearchService {
       ]);
 
       // Get suggestions
-      const suggestions = await this.autocompleteService.getSuggestions(
-        searchQuery.query || '',
-      );
+      const suggestions = await this.autocompleteService.getSuggestions(searchQuery.query || '');
 
       // Record search history
       if (searchQuery.query) {
@@ -151,5 +143,4 @@ export class SearchService {
   async getPopularSearches(): Promise<string[]> {
     return this.analyticsService.getPopularSearches();
   }
-
 }

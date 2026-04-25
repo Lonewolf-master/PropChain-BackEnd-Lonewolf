@@ -32,10 +32,7 @@ export class PropertiesResolver {
 
   @Mutation(() => Property)
   @UseGuards(GqlAuthGuard)
-  async createProperty(
-    @GqlUser() user: any,
-    @Args('input') input: CreatePropertyDto,
-  ) {
+  async createProperty(@GqlUser() user: any, @Args('input') input: CreatePropertyDto) {
     const property = await this.propertiesService.create(input, user.id);
     this.pubSub.publish('propertyAdded', { propertyAdded: property });
     return property;
@@ -43,10 +40,7 @@ export class PropertiesResolver {
 
   @Mutation(() => Property)
   @UseGuards(GqlAuthGuard)
-  async updateProperty(
-    @Args('id') id: string,
-    @Args('input') input: UpdatePropertyDto,
-  ) {
+  async updateProperty(@Args('id') id: string, @Args('input') input: UpdatePropertyDto) {
     return this.propertiesService.update(id, input);
   }
 

@@ -110,6 +110,24 @@ enum RestoreStatus {
   FAILED
 }
 
+enum NotificationStatus {
+  PENDING
+  DELIVERED
+  READ
+}
+
+enum EmailStatus {
+  ACTIVE
+  BOUNCED
+  INVALID
+}
+
+enum BounceType {
+  HARD
+  SOFT
+}
+
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -168,6 +186,12 @@ model User {
   searchHistory           SearchHistory[]
   initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
+  emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
+  notifications           Notification[]
+  linkClicks              LinkClick[]
+  emailEngagements        EmailEngagement[]
+  emailBounces            EmailBounce[]
+
 
   @@index([email])
   @@index([role])
@@ -663,3 +687,75 @@ model SearchSuggestion {
   @@index([expiresAt])
   @@map("search_suggestions")
 }
+
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String             @map("user_id")
+  title     String
+  message   String
+  type      String
+  status    NotificationStatus @default(PENDING)
+  metadata  Json?
+  createdAt DateTime           @default(now()) @map("created_at")
+  readAt    DateTime?          @map("read_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model LinkClick {
+  id        String   @id @default(uuid())
+  url       String
+  userId    String?  @map("user_id")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([url])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("link_clicks")
+}
+
+model EmailEngagement {
+  id          String    @id @default(uuid())
+  trackingId  String    @unique @map("tracking_id")
+  userId      String    @map("user_id")
+  emailType   String    @map("email_type")
+  openedAt    DateTime? @map("opened_at")
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([trackingId])
+  @@index([createdAt])
+  @@map("email_engagements")
+}
+
+model EmailBounce {
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  email       String
+  bounceType  BounceType @map("bounce_type")
+  reason      String?
+  rawEvent    Json?      @map("raw_event")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([bounceType])
+  @@map("email_bounces")
+}
+

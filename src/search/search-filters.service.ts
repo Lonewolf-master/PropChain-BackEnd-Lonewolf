@@ -28,14 +28,9 @@ export interface FilterCombination {
 
 @Injectable()
 export class SearchFiltersService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async applyFilters(
-    whereClause: any,
-    filters: Record<string, any>,
-  ): Promise<any> {
+  async applyFilters(whereClause: any, filters: Record<string, any>): Promise<any> {
     const filterKeys = Object.keys(filters);
 
     for (const key of filterKeys) {
@@ -334,19 +329,12 @@ export class SearchFiltersService {
     // For now, do nothing
   }
 
-  async applyFilterCombination(
-    whereClause: any,
-    combination: FilterCombination,
-  ): Promise<any> {
+  async applyFilterCombination(whereClause: any, combination: FilterCombination): Promise<any> {
     if (combination.operator === 'AND') {
-      const conditions = combination.filters.map(filter => 
-        this.applyFilters({}, filter)
-      );
+      const conditions = combination.filters.map((filter) => this.applyFilters({}, filter));
       whereClause.AND = [...(whereClause.AND || []), ...conditions];
     } else if (combination.operator === 'OR') {
-      const conditions = combination.filters.map(filter => 
-        this.applyFilters({}, filter)
-      );
+      const conditions = combination.filters.map((filter) => this.applyFilters({}, filter));
       whereClause.OR = [...(whereClause.OR || []), ...conditions];
     }
 

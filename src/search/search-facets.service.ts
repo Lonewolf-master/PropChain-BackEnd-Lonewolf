@@ -35,10 +35,7 @@ export class SearchFacetsService {
     });
   }
 
-  applyFacetFilter(
-    items: SearchableItem[],
-    filters: Record<string, string>,
-  ): SearchableItem[] {
+  applyFacetFilter(items: SearchableItem[], filters: Record<string, string>): SearchableItem[] {
     return items.filter((item) =>
       Object.entries(filters).every(([field, value]) => String(item[field] ?? '') === value),
     );

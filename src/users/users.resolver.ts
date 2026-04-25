@@ -30,10 +30,7 @@ export class UsersResolver {
 
   @Mutation(() => User)
   @UseGuards(GqlAuthGuard)
-  async updateProfile(
-    @GqlUser() user: any,
-    @Args('input') input: UpdateUserDto,
-  ) {
+  async updateProfile(@GqlUser() user: any, @Args('input') input: UpdateUserDto) {
     // Note: UpdateUserDto might need @InputType() decoration if not already.
     // NestJS GraphQL can automatically handle it if mapped correctly.
     return this.usersService.update(user.id, input);

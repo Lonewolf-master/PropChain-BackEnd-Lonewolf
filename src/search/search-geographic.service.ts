@@ -13,10 +13,7 @@ export interface Point {
 
 @Injectable()
 export class SearchGeographicService {
-  async applyGeographicFilter(
-    whereClause: any,
-    geographic: GeographicFilter,
-  ): Promise<any> {
+  async applyGeographicFilter(whereClause: any, geographic: GeographicFilter): Promise<any> {
     if (geographic.type === 'radius') {
       return this.applyRadiusFilter(whereClause, geographic);
     } else if (geographic.type === 'polygon') {
@@ -25,10 +22,7 @@ export class SearchGeographicService {
     return whereClause;
   }
 
-  private async applyRadiusFilter(
-    whereClause: any,
-    geographic: GeographicFilter,
-  ): Promise<any> {
+  private async applyRadiusFilter(whereClause: any, geographic: GeographicFilter): Promise<any> {
     const center = geographic.coordinates[0];
     const radius = geographic.radius || 10; // default 10 miles
 
@@ -53,13 +47,10 @@ export class SearchGeographicService {
     return whereClause;
   }
 
-  private async applyPolygonFilter(
-    whereClause: any,
-    geographic: GeographicFilter,
-  ): Promise<any> {
+  private async applyPolygonFilter(whereClause: any, geographic: GeographicFilter): Promise<any> {
     // Get bounding box of polygon for initial filtering
     const bounds = this.getBoundingBox(geographic.coordinates);
-    
+
     whereClause.AND = [
       ...(whereClause.AND || []),
       {
@@ -82,7 +73,7 @@ export class SearchGeographicService {
     centerPoint: Point,
     maxDistance?: number,
   ): Promise<any[]> {
-    const propertiesWithDistance = properties.map(property => {
+    const propertiesWithDistance = properties.map((property) => {
       if (!property.latitude || !property.longitude) {
         return { ...property, distance: Infinity };
       }
@@ -99,19 +90,14 @@ export class SearchGeographicService {
 
     // Filter by max distance if specified
     const filtered = maxDistance
-      ? propertiesWithDistance.filter(p => p.distance <= maxDistance)
+      ? propertiesWithDistance.filter((p) => p.distance <= maxDistance)
       : propertiesWithDistance;
 
     // Sort by distance
     return filtered.sort((a, b) => a.distance - b.distance);
   }
 
-  private calculateDistance(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
+  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const R = 3959; // Earth's radius in miles
     const dLat = this.toRadians(lat2 - lat1);
     const dLng = this.toRadians(lng2 - lng1);
@@ -135,8 +121,8 @@ export class SearchGeographicService {
     minLng: number;
     maxLng: number;
   } {
-    const lats = coordinates.map(coord => coord[0]);
-    const lngs = coordinates.map(coord => coord[1]);
+    const lats = coordinates.map((coord) => coord[0]);
+    const lngs = coordinates.map((coord) => coord[1]);
 
     return {
       minLat: Math.min(...lats),
@@ -157,9 +143,7 @@ export class SearchGeographicService {
       const xj = polygon[j][1];
       const yj = polygon[j][0];
 
-      const intersect =
-        yi > y !== yj > y &&
-        x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+      const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
 
       if (intersect) inside = !inside;
     }
@@ -183,14 +167,12 @@ export class SearchGeographicService {
   } | null {
     if (properties.length === 0) return null;
 
-    const validProperties = properties.filter(
-      p => p.latitude && p.longitude,
-    );
+    const validProperties = properties.filter((p) => p.latitude && p.longitude);
 
     if (validProperties.length === 0) return null;
 
-    const lats = validProperties.map(p => p.latitude);
-    const lngs = validProperties.map(p => p.longitude);
+    const lats = validProperties.map((p) => p.latitude);
+    const lngs = validProperties.map((p) => p.longitude);
 
     return {
       northeast: {

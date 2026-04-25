@@ -6,10 +6,7 @@ export class ContentController {
   constructor(private service: ContentService) {}
 
   @Post('pages/:slug')
-  updatePage(
-    @Param('slug') slug: string,
-    @Body() body: { title: string; content: string },
-  ) {
+  updatePage(@Param('slug') slug: string, @Body() body: { title: string; content: string }) {
     return this.service.updatePage(slug, body);
   }
 
@@ -39,10 +36,7 @@ export class ContentController {
   }
 
   @Post('legal/:type')
-  updateLegal(
-    @Param('type') type: string,
-    @Body() body: { content: string },
-  ) {
+  updateLegal(@Param('type') type: string, @Body() body: { content: string }) {
     return this.service.updateLegal(type, body.content);
   }
 

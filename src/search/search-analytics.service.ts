@@ -41,25 +41,19 @@ export interface SearchInsights {
 
 @Injectable()
 export class SearchAnalyticsService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async recordSearch(userId: string, searchQuery: SearchQuery): Promise<string> {
     const queryId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Record search analytics
     // This would typically save to a search analytics table
     // For now, we'll simulate the recording
-    
+
     return queryId;
   }
 
-  async recordSearchResults(
-    queryId: string,
-    resultsCount: number,
-    took: number,
-  ): Promise<void> {
+  async recordSearchResults(queryId: string, resultsCount: number, took: number): Promise<void> {
     // Update search record with results
     // This would typically update the search analytics record
   }
@@ -106,30 +100,30 @@ export class SearchAnalyticsService {
     // This would typically query search analytics for searches with no results
     // For now, return mock data
     return [
-      { 
-        query: 'mansion under 100k', 
-        count: 23, 
-        suggestedAlternatives: ['luxury home', 'estate property', 'high-end house'] 
+      {
+        query: 'mansion under 100k',
+        count: 23,
+        suggestedAlternatives: ['luxury home', 'estate property', 'high-end house'],
       },
-      { 
-        query: 'beachfront in desert', 
-        count: 18, 
-        suggestedAlternatives: ['beachfront property', 'desert home', 'coastal house'] 
+      {
+        query: 'beachfront in desert',
+        count: 18,
+        suggestedAlternatives: ['beachfront property', 'desert home', 'coastal house'],
       },
-      { 
-        query: 'free house', 
-        count: 15, 
-        suggestedAlternatives: ['affordable home', 'low-cost property', 'budget house'] 
+      {
+        query: 'free house',
+        count: 15,
+        suggestedAlternatives: ['affordable home', 'low-cost property', 'budget house'],
       },
-      { 
-        query: 'castle for rent', 
-        count: 12, 
-        suggestedAlternatives: ['luxury rental', 'historic home', 'estate rental'] 
+      {
+        query: 'castle for rent',
+        count: 12,
+        suggestedAlternatives: ['luxury rental', 'historic home', 'estate rental'],
       },
-      { 
-        query: 'underwater house', 
-        count: 8, 
-        suggestedAlternatives: ['waterfront property', 'lake house', 'beach house'] 
+      {
+        query: 'underwater house',
+        count: 8,
+        suggestedAlternatives: ['waterfront property', 'lake house', 'beach house'],
       },
     ].slice(0, limit);
   }
@@ -156,11 +150,11 @@ export class SearchAnalyticsService {
     // For now, return mock data
     const trends = [];
     const today = new Date();
-    
+
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
-      
+
       trends.push({
         date: date.toISOString().split('T')[0],
         searches: Math.floor(Math.random() * 100) + 50,
@@ -168,7 +162,7 @@ export class SearchAnalyticsService {
         avgResults: Math.floor(Math.random() * 20) + 10,
       });
     }
-    
+
     return trends;
   }
 
@@ -214,7 +208,10 @@ export class SearchAnalyticsService {
     };
   }
 
-  async generateSearchReport(userId?: string, dateRange?: { start: Date; end: Date }): Promise<any> {
+  async generateSearchReport(
+    userId?: string,
+    dateRange?: { start: Date; end: Date },
+  ): Promise<any> {
     const insights = await this.getAnalytics(userId);
     const performance = await this.getSearchPerformanceMetrics(userId);
     const topFilters = await this.getTopFilters(userId);
@@ -222,7 +219,9 @@ export class SearchAnalyticsService {
     return {
       summary: {
         totalSearches: insights.popularSearches.reduce((sum, s) => sum + s.count, 0),
-        avgConversionRate: insights.conversionRates.reduce((sum, c) => sum + c.rate, 0) / insights.conversionRates.length,
+        avgConversionRate:
+          insights.conversionRates.reduce((sum, c) => sum + c.rate, 0) /
+          insights.conversionRates.length,
         zeroResultQueries: insights.noResultSearches.length,
       },
       insights,
@@ -238,7 +237,9 @@ export class SearchAnalyticsService {
     // Analyze popular searches
     const topSearch = insights.popularSearches[0];
     if (topSearch && topSearch.trend === 'up') {
-      recommendations.push(`Focus on "${topSearch.query}" - it's trending upward with ${topSearch.count} searches`);
+      recommendations.push(
+        `Focus on "${topSearch.query}" - it's trending upward with ${topSearch.count} searches`,
+      );
     }
 
     // Analyze zero-result searches
@@ -247,7 +248,7 @@ export class SearchAnalyticsService {
     }
 
     // Analyze conversion rates
-    const lowConversionQueries = insights.conversionRates.filter(c => c.rate < 10);
+    const lowConversionQueries = insights.conversionRates.filter((c) => c.rate < 10);
     if (lowConversionQueries.length > 3) {
       recommendations.push('Review search result quality for queries with low conversion rates');
     }
