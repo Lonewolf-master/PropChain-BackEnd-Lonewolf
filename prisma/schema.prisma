@@ -91,6 +91,25 @@ enum FraudPattern {
   HIGH_VALUE_NEW_ACCOUNT_LISTING
 }
 
+enum BackupStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum BackupTrigger {
+  MANUAL
+  SCHEDULED
+}
+
+enum RestoreStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -147,6 +166,8 @@ model User {
   savedFilters            SavedFilter[]
   searchAnalytics         SearchAnalytics[]
   searchHistory           SearchHistory[]
+  initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
+  restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
 
   @@index([email])
   @@index([role])
@@ -154,6 +175,46 @@ model User {
   @@index([scheduledDeletionAt])
   @@index([referralCode])
   @@map("users")
+}
+
+model DatabaseBackup {
+  id                 String        @id @default(uuid())
+  filename           String        @unique
+  filePath           String        @map("file_path")
+  status             BackupStatus  @default(PENDING)
+  trigger            BackupTrigger
+  sizeBytes          BigInt?       @map("size_bytes")
+  checksum           String?
+  startedAt          DateTime      @default(now()) @map("started_at")
+  completedAt        DateTime?     @map("completed_at")
+  errorMessage       String?       @map("error_message") @db.Text
+  initiatedById      String?       @map("initiated_by_id")
+  restoreStatus      RestoreStatus @default(IDLE) @map("restore_status")
+  restoredAt         DateTime?     @map("restored_at")
+  restoreError       String?       @map("restore_error") @db.Text
+  restoredById       String?       @map("restored_by_id")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  initiatedBy User? @relation("BackupInitiatedBy", fields: [initiatedById], references: [id], onDelete: SetNull)
+  restoredBy  User? @relation("BackupRestoredBy", fields: [restoredById], references: [id], onDelete: SetNull)
+
+  @@index([status, startedAt])
+  @@index([restoreStatus, restoredAt])
+  @@index([trigger, createdAt])
+  @@map("database_backups")
+}
+
+model BackupScheduleConfig {
+  id             String   @id
+  enabled        Boolean  @default(false)
+  cronExpression String   @map("cron_expression")
+  retentionCount Int      @default(10) @map("retention_count")
+  lastRunAt      DateTime? @map("last_run_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("backup_schedule_configs")
 }
 
 model ApiKey {

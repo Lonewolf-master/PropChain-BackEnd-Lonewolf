@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { BackupService } from '../backup/backup.service';
+import { UpdateBackupScheduleDto } from '../backup/dto/backup.dto';
 import {
   AddFraudInvestigationNoteDto,
   AdminUpdateUserDto,
@@ -20,7 +22,36 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fraudService: FraudService,
+    private readonly backupService: BackupService,
   ) {}
+
+  async listBackups() {
+    return this.backupService.listBackups();
+  }
+
+  async getBackupStatus() {
+    return this.backupService.getBackupStatus();
+  }
+
+  async getBackupSchedule() {
+    return this.backupService.getSchedule();
+  }
+
+  async updateBackupSchedule(payload: UpdateBackupScheduleDto) {
+    return this.backupService.updateSchedule(payload);
+  }
+
+  async runBackup(actorId: string) {
+    return this.backupService.createManualBackup(actorId);
+  }
+
+  async restoreBackup(backupId: string, actorId: string) {
+    return this.backupService.restoreBackup(backupId, actorId);
+  }
+
+  async getBackupDownload(backupId: string) {
+    return this.backupService.getBackupFile(backupId);
+  }
 
   async getDashboard() {
     const [totalUsers, blockedUsers, totalProperties, pendingProperties, activeProperties] =

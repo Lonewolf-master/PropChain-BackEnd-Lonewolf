@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,6 +19,7 @@ import {
   ReviewFraudAlertDto,
   TransactionMonitoringQueryDto,
 } from './dto/admin.dto';
+import { RestoreBackupDto, UpdateBackupScheduleDto } from '../backup/dto/backup.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,6 +30,46 @@ export class AdminController {
   @Get('dashboard')
   getDashboard() {
     return this.adminService.getDashboard();
+  }
+
+  @Get('backups')
+  listBackups() {
+    return this.adminService.listBackups();
+  }
+
+  @Get('backups/status')
+  getBackupStatus() {
+    return this.adminService.getBackupStatus();
+  }
+
+  @Get('backups/schedule')
+  getBackupSchedule() {
+    return this.adminService.getBackupSchedule();
+  }
+
+  @Put('backups/schedule')
+  updateBackupSchedule(@Body() payload: UpdateBackupScheduleDto) {
+    return this.adminService.updateBackupSchedule(payload);
+  }
+
+  @Post('backups/run')
+  runBackup(@CurrentUser() user: AuthUserPayload) {
+    return this.adminService.runBackup(user.sub);
+  }
+
+  @Post('backups/:id/restore')
+  restoreBackup(
+    @Param('id') backupId: string,
+    @Body() _payload: RestoreBackupDto,
+    @CurrentUser() user: AuthUserPayload,
+  ) {
+    return this.adminService.restoreBackup(backupId, user.sub);
+  }
+
+  @Get('backups/:id/download')
+  async downloadBackup(@Param('id') backupId: string, @Res() res: Response) {
+    const file = await this.adminService.getBackupDownload(backupId);
+    return res.download(file.filePath, file.filename);
   }
 
   @Get('users')
