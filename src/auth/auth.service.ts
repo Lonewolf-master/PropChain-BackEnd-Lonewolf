@@ -41,6 +41,7 @@ import {
   verifyTotpCode,
 } from './security.utils';
 import { AuthUserPayload } from './types/auth-user.type';
+import { GoogleProfile } from './strategies/google.strategy';
 
 import { LoginRateLimitService } from './login-rate-limit.service';
 import { UserRole } from '../types/prisma.types';
@@ -176,7 +177,7 @@ export class AuthService {
       );
     }
 
-    const passwordMatches = await comparePassword(data.password, user.password);
+    const passwordMatches = await comparePassword(data.password, user.password ?? '');
     if (!passwordMatches) {
       // Record failed login attempt
       const shouldLock = await this.rateLimitService.recordFailedAttempt(
@@ -666,7 +667,7 @@ export class AuthService {
 
     const currentPasswordMatches = await comparePassword(
       data.currentPassword,
-      existingUser.password,
+      existingUser.password ?? '',
     );
     if (!currentPasswordMatches) {
       throw new UnauthorizedException('Current password is incorrect');
@@ -792,7 +793,7 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const passwordMatches = await comparePassword(password, foundUser.password);
+    const passwordMatches = await comparePassword(password, foundUser.password ?? '');
     if (!passwordMatches) {
       throw new UnauthorizedException('Password is incorrect');
     }
@@ -886,6 +887,51 @@ export class AuthService {
     });
 
     return { message: 'API key revoked successfully' };
+  }
+
+  async googleOAuthLogin(profile: GoogleProfile) {
+    let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
+
+    if (!user) {
+      // Try to link to an existing account by email
+      user = await this.prisma.user.findUnique({ where: { email: profile.email } });
+
+      if (user) {
+        // Link Google account to existing user
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId: profile.googleId,
+            avatar: user.avatar ?? profile.avatar,
+          },
+        });
+      } else {
+        // Create new user from Google profile
+        user = await this.prisma.user.create({
+          data: {
+            email: profile.email,
+            googleId: profile.googleId,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            avatar: profile.avatar,
+            isVerified: true,
+          },
+        });
+      }
+    } else {
+      // Sync profile fields
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          avatar: user.avatar ?? profile.avatar,
+        },
+      });
+    }
+
+    const tokens = await this.issueTokenPair(user);
+    return { user: sanitizeUser(user), ...tokens };
   }
 
   async updateApiKeyPermissions(
