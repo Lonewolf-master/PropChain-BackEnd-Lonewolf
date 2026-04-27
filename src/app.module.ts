@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -21,6 +22,7 @@ import './common/common.types'; // Load registered enums
 import { AdminModule } from './admin/admin.module';
 import { FraudModule } from './fraud/fraud.module';
 import { SearchModule } from './search/search.module';
+import { BackupModule } from './backup/backup.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
 @Module({
@@ -38,6 +40,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         'graphql-ws': true,
       },
     }),
+    ScheduleModule.forRoot(),
     CacheModuleConfig,
     AnalyticsModule,
     PrismaModule,
@@ -54,6 +57,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     DocumentsModule,
     IntegrationsModule,
     SearchModule,
+    BackupModule,
     TrackingModule,
     NotificationsModule,
   ],
