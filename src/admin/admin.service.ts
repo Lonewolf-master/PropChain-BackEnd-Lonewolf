@@ -13,9 +13,11 @@ import {
   ModerationQueueQueryDto,
   ReviewFraudAlertDto,
   TransactionMonitoringQueryDto,
+  UpdateTransactionStatusDto,
 } from './dto/admin.dto';
-import { PropertyStatus } from '../types/prisma.types';
+import { PropertyStatus, TransactionStatus, TransactionType } from '../types/prisma.types';
 import { FraudService } from '../fraud/fraud.service';
+import { TransactionsService } from '../transactions/transactions.service';
 
 @Injectable()
 export class AdminService {
@@ -23,6 +25,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly fraudService: FraudService,
     private readonly backupService: BackupService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async listBackups() {
@@ -70,15 +73,14 @@ export class AdminService {
       salesAggregate,
       rentAggregate,
     ] = await Promise.all([
-      this.prisma.transaction.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.transaction.count({ where: { status: 'PENDING' } }),
-      this.prisma.transaction.count({ where: { status: 'FAILED' } }),
+      this.prisma.transaction.count({ where: { status: TransactionStatus.COMPLETED } }),
+      this.prisma.transaction.count({ where: { status: TransactionStatus.PENDING } }),
       this.prisma.transaction.aggregate({
-        where: { status: 'COMPLETED', type: 'SALE' },
+        where: { status: TransactionStatus.COMPLETED, type: TransactionType.SALE },
         _sum: { amount: true },
       }),
       this.prisma.transaction.aggregate({
-        where: { status: 'COMPLETED', type: 'TRANSFER' },
+        where: { status: TransactionStatus.COMPLETED, type: TransactionType.TRANSFER },
         _sum: { amount: true },
       }),
     ]);
@@ -101,7 +103,6 @@ export class AdminService {
       systemHealth: {
         completedTransactions,
         pendingTransactions,
-        failedTransactions,
       },
     };
   }
@@ -310,13 +311,12 @@ export class AdminService {
   }
 
   async transactionMonitoringSummary() {
-    const [pending, completed, cancelled, failed, aggregateValue] = await Promise.all([
-      this.prisma.transaction.count({ where: { status: 'PENDING' } }),
-      this.prisma.transaction.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.transaction.count({ where: { status: 'CANCELLED' } }),
-      this.prisma.transaction.count({ where: { status: 'FAILED' } }),
+    const [pending, completed, cancelled, aggregateValue] = await Promise.all([
+      this.prisma.transaction.count({ where: { status: TransactionStatus.PENDING } }),
+      this.prisma.transaction.count({ where: { status: TransactionStatus.COMPLETED } }),
+      this.prisma.transaction.count({ where: { status: TransactionStatus.CANCELLED } }),
       this.prisma.transaction.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { status: TransactionStatus.COMPLETED },
         _sum: { amount: true },
       }),
     ]);
@@ -325,9 +325,12 @@ export class AdminService {
       pending,
       completed,
       cancelled,
-      failed,
       totalCompletedValue: aggregateValue._sum.amount ?? 0,
     };
+  }
+
+  async updateTransactionStatus(transactionId: string, payload: UpdateTransactionStatusDto) {
+    return this.transactionsService.updateTransactionStatus(transactionId, payload.status);
   }
 
   async listFraudAlerts(query: FraudAlertsQueryDto) {
