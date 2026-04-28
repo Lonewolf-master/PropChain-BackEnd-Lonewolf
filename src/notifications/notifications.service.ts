@@ -28,6 +28,12 @@ export class NotificationsService {
     });
 
     // 2. Try real-time delivery
+    // FCM Push Integration
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+    if (user?.fcmToken) {
+      console.log(Sending FCM notification to token: \);
+      // In production, use admin.messaging().send() here
+    }
     const delivered = this.gateway.sendToUser(userId, 'notification', notification);
 
     if (delivered) {
