@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateDisputeDto, ResolveDisputeDto } from './dto/dispute.dto';
-import { DisputeStatus } from '@prisma/client';
+import { DisputeStatus } from '../types/prisma.types';
 
 @Injectable()
 export class DisputesService {

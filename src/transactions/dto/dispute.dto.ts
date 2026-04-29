@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsUUID, IsEnum } from 'class-validator';
-import { DisputeStatus } from '@prisma/client';
+import { DisputeStatus } from '../../types/prisma.types';
 
 export class CreateDisputeDto {
   @IsUUID()
