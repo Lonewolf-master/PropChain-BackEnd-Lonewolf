@@ -139,6 +139,11 @@ export class TransactionMonitoringQueryDto {
   limit: number = 20;
 }
 
+export class UpdateTransactionStatusDto {
+  @IsEnum(TransactionStatus)
+  status!: TransactionStatus;
+}
+
 export {
   AddFraudInvestigationNoteDto,
   BlockFraudUserDto,

@@ -18,6 +18,7 @@ import {
   ModerationQueueQueryDto,
   ReviewFraudAlertDto,
   TransactionMonitoringQueryDto,
+  UpdateTransactionStatusDto,
 } from './dto/admin.dto';
 import { RestoreBackupDto, UpdateBackupScheduleDto } from '../backup/dto/backup.dto';
 
@@ -125,6 +126,14 @@ export class AdminController {
   @Get('transactions/monitoring/summary')
   monitorTransactionsSummary() {
     return this.adminService.transactionMonitoringSummary();
+  }
+
+  @Patch('transactions/:id/status')
+  updateTransactionStatus(
+    @Param('id') transactionId: string,
+    @Body() payload: UpdateTransactionStatusDto,
+  ) {
+    return this.adminService.updateTransactionStatus(transactionId, payload);
   }
 
   @Get('fraud/alerts')
