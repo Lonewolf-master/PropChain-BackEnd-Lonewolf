@@ -1,13 +1,19 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../src/database/prisma.service';
-import { TransactionStatus, TransactionType } from '../../src/types/prisma.types';
+import { TransactionStatus, TransactionType, UserRole } from '../../src/types/prisma.types';
 import { TransactionsService } from '../../src/transactions/transactions.service';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
 
   const mockPrismaService = {
+    property: {
+      findUnique: jest.fn(),
+    },
+    user: {
+      findUnique: jest.fn(),
+    },
     transaction: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -30,30 +36,244 @@ describe('TransactionsService', () => {
     jest.clearAllMocks();
   });
 
-  it('creates transactions with PENDING status by default', async () => {
+  it('creates a transaction linked to property, buyer, seller, and amount', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue({
+      id: 'property-1',
+      title: 'Ocean View',
+      address: '123 Coast St',
+      ownerId: 'seller-1',
+    });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      })
+      .mockResolvedValueOnce({
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      });
     mockPrismaService.transaction.create.mockResolvedValue({
       id: 'txn-1',
-      status: TransactionStatus.PENDING,
+      amount: { toString: () => '1000' },
+      property: {
+        id: 'property-1',
+        title: 'Ocean View',
+        address: '123 Coast St',
+      },
+      buyer: {
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      },
+      seller: {
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      },
     });
 
-    await service.createTransaction({
-      propertyId: 'property-1',
-      buyerId: 'buyer-1',
-      sellerId: 'seller-1',
-      amount: 1000,
-      type: TransactionType.SALE,
-    });
+    const result = await service.createTransaction(
+      {
+        propertyId: 'property-1',
+        buyerId: 'buyer-1',
+        sellerId: 'seller-1',
+        amount: 1000,
+        type: TransactionType.SALE,
+      },
+      {
+        sub: 'buyer-1',
+        email: 'buyer@example.com',
+        role: UserRole.USER,
+        type: 'access',
+      },
+    );
 
     expect(mockPrismaService.transaction.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         propertyId: 'property-1',
         buyerId: 'buyer-1',
         sellerId: 'seller-1',
-        amount: 1000,
         type: TransactionType.SALE,
         status: TransactionStatus.PENDING,
       }),
+      include: expect.objectContaining({
+        property: expect.any(Object),
+        buyer: expect.any(Object),
+        seller: expect.any(Object),
+      }),
     });
+    expect(result).toEqual(
+      expect.objectContaining({
+        amount: expect.objectContaining({ toString: expect.any(Function) }),
+        property: expect.objectContaining({ id: 'property-1' }),
+        buyer: expect.objectContaining({ id: 'buyer-1' }),
+        seller: expect.objectContaining({ id: 'seller-1' }),
+      }),
+    );
+  });
+
+  it('creates transactions with PENDING status by default', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue({
+      id: 'property-1',
+      title: 'Property',
+      address: '123 Main St',
+      ownerId: 'seller-1',
+    });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      })
+      .mockResolvedValueOnce({
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      });
+    mockPrismaService.transaction.create.mockResolvedValue({
+      id: 'txn-1',
+      status: TransactionStatus.PENDING,
+    });
+
+    await service.createTransaction(
+      {
+        propertyId: 'property-1',
+        buyerId: 'buyer-1',
+        sellerId: 'seller-1',
+        amount: 1000,
+        type: TransactionType.SALE,
+      },
+      {
+        sub: 'buyer-1',
+        email: 'buyer@example.com',
+        role: UserRole.USER,
+        type: 'access',
+      },
+    );
+
+    expect(mockPrismaService.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        propertyId: 'property-1',
+        buyerId: 'buyer-1',
+        sellerId: 'seller-1',
+        type: TransactionType.SALE,
+        status: TransactionStatus.PENDING,
+      }),
+      include: expect.any(Object),
+    });
+  });
+
+  it('rejects invalid property references', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue(null);
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      })
+      .mockResolvedValueOnce({
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      });
+
+    await expect(
+      service.createTransaction(
+        {
+          propertyId: 'missing-property',
+          buyerId: 'buyer-1',
+          sellerId: 'seller-1',
+          amount: 1000,
+          type: TransactionType.SALE,
+        },
+        {
+          sub: 'buyer-1',
+          email: 'buyer@example.com',
+          role: UserRole.USER,
+          type: 'access',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects invalid buyer references', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue({
+      id: 'property-1',
+      title: 'Property',
+      address: '123 Main St',
+      ownerId: 'seller-1',
+    });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      });
+
+    await expect(
+      service.createTransaction(
+        {
+          propertyId: 'property-1',
+          buyerId: 'missing-buyer',
+          sellerId: 'seller-1',
+          amount: 1000,
+          type: TransactionType.SALE,
+        },
+        {
+          sub: 'missing-buyer',
+          email: 'buyer@example.com',
+          role: UserRole.USER,
+          type: 'access',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects invalid seller references', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue({
+      id: 'property-1',
+      title: 'Property',
+      address: '123 Main St',
+      ownerId: 'seller-1',
+    });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      })
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      service.createTransaction(
+        {
+          propertyId: 'property-1',
+          buyerId: 'buyer-1',
+          sellerId: 'missing-seller',
+          amount: 1000,
+          type: TransactionType.SALE,
+        },
+        {
+          sub: 'buyer-1',
+          email: 'buyer@example.com',
+          role: UserRole.USER,
+          type: 'access',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('allows a valid transition from PENDING to COMPLETED', async () => {
