@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../src/database/prisma.service';
+import { NotificationsService } from '../../src/notifications/notifications.service';
 import { TransactionStatus, TransactionType, UserRole } from '../../src/types/prisma.types';
 import { TransactionsService } from '../../src/transactions/transactions.service';
 
@@ -19,13 +20,24 @@ describe('TransactionsService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    transactionTaxStrategy: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
   } as any;
+
+  const mockNotificationsService = {
+    sendNotification: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TransactionsService,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 
@@ -332,5 +344,121 @@ describe('TransactionsService', () => {
     await expect(
       service.updateTransactionStatus('missing-txn', TransactionStatus.COMPLETED),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('creates and stores a tax strategy suggestion with computed impact and notifications', async () => {
+    mockPrismaService.transaction.findUnique.mockResolvedValue({
+      id: 'txn-1',
+      buyerId: 'buyer-1',
+      sellerId: 'seller-1',
+      amount: { mul: (value: number) => ({ div: (divisor: number) => (1000 * value) / divisor }) },
+      property: {
+        id: 'property-1',
+        city: 'Austin',
+        state: 'Texas',
+        country: 'USA',
+      },
+    });
+    mockPrismaService.transactionTaxStrategy.create.mockResolvedValue({
+      id: 'strategy-1',
+      transactionId: 'txn-1',
+      strategyType: 'Installment sale timing',
+      jurisdiction: 'Austin, Texas, USA',
+      estimatedTaxImpact: { toString: () => '75' },
+      version: 1,
+    });
+
+    const result = await service.createTaxStrategySuggestion(
+      'txn-1',
+      {
+        strategyType: 'Installment sale timing',
+        estimatedTaxRate: 7.5,
+        explanation: 'Spread taxable recognition across milestones when appropriate.',
+        metadata: { source: 'internal-review' },
+      },
+      {
+        sub: 'buyer-1',
+        email: 'buyer@example.com',
+        role: UserRole.USER,
+        type: 'access',
+      },
+    );
+
+    expect(mockPrismaService.transactionTaxStrategy.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        transactionId: 'txn-1',
+        createdById: 'buyer-1',
+        strategyType: 'Installment sale timing',
+        jurisdiction: 'Austin, Texas, USA',
+        explanation: 'Spread taxable recognition across milestones when appropriate.',
+        version: 1,
+      }),
+    });
+    expect(mockNotificationsService.sendNotification).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'strategy-1',
+        transactionId: 'txn-1',
+      }),
+    );
+  });
+
+  it('updates a tax strategy suggestion without changing transaction behavior', async () => {
+    mockPrismaService.transaction.findUnique.mockResolvedValue({
+      id: 'txn-1',
+      buyerId: 'buyer-1',
+      sellerId: 'seller-1',
+      amount: { mul: (value: number) => ({ div: (divisor: number) => (1000 * value) / divisor }) },
+      property: {
+        id: 'property-1',
+        city: 'Austin',
+        state: 'Texas',
+        country: 'USA',
+      },
+    });
+    mockPrismaService.transactionTaxStrategy.findFirst.mockResolvedValue({
+      id: 'strategy-1',
+      transactionId: 'txn-1',
+      strategyType: 'Installment sale timing',
+      jurisdiction: 'Austin, Texas, USA',
+      estimatedTaxRate: 5,
+      estimatedTaxImpact: 50,
+      explanation: 'Initial note',
+      metadata: { source: 'internal-review' },
+      version: 1,
+    });
+    mockPrismaService.transactionTaxStrategy.update.mockResolvedValue({
+      id: 'strategy-1',
+      transactionId: 'txn-1',
+      strategyType: '1031-style planning',
+      jurisdiction: 'USA',
+      version: 2,
+    });
+
+    const result = await service.updateTaxStrategySuggestion(
+      'txn-1',
+      'strategy-1',
+      {
+        strategyType: '1031-style planning',
+        jurisdiction: 'USA',
+      },
+      {
+        sub: 'seller-1',
+        email: 'seller@example.com',
+        role: UserRole.USER,
+        type: 'access',
+      },
+    );
+
+    expect(mockPrismaService.transactionTaxStrategy.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-1' },
+      data: expect.objectContaining({
+        strategyType: '1031-style planning',
+        jurisdiction: 'USA',
+        version: 2,
+      }),
+    });
+    expect(mockPrismaService.transaction.create).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ version: 2 }));
   });
 });

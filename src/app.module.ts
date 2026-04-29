@@ -25,6 +25,7 @@ import { SearchModule } from './search/search.module';
 import { BackupModule } from './backup/backup.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TransactionsModule } from './transactions/transactions.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -60,6 +61,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     BackupModule,
     TrackingModule,
     NotificationsModule,
+    TransactionsModule,
   ],
   controllers: [AppController],
 })
