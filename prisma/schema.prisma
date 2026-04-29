@@ -126,6 +126,11 @@ enum BounceType {
   SOFT
 }
 
+enum DigestFrequency {
+  DAILY
+  WEEKLY
+}
+
 
 enum DisputeStatus {
   OPEN
@@ -200,12 +205,14 @@ model User {
   initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
+  fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
   disputeInitiated        Dispute[]             @relation("DisputeInitiator")
   disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
+  digestPreference        DigestPreference?
 
 
   @@index([email])
@@ -510,6 +517,7 @@ model ActivityLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([entityType, entityId])
   @@map("activity_logs")
 }
@@ -656,6 +664,7 @@ model SearchAnalytics {
   @@index([userId])
   @@index([queryId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([hasResults])
   @@index([converted])
   @@map("search_analytics")
@@ -719,12 +728,17 @@ model Notification {
   metadata  Json?
   createdAt DateTime           @default(now()) @map("created_at")
   readAt    DateTime?          @map("read_at")
+  scheduledAt DateTime?          @map("scheduled_at")
+  isRecurring Boolean            @default(false) @map("is_recurring")
+  cron        String?            @map("cron")
+  timezone    String             @default("UTC")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("notifications")
 }
 
@@ -786,6 +800,7 @@ model LinkClick {
   @@index([url])
   @@index([userId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("link_clicks")
 }
 
@@ -804,6 +819,7 @@ model EmailEngagement {
   @@index([userId])
   @@index([trackingId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("email_engagements")
 }
 
@@ -824,3 +840,20 @@ model EmailBounce {
   @@map("email_bounces")
 }
 
+
+model DigestPreference {
+  id               String          @id @default(uuid())
+  userId           String          @unique @map("user_id")
+  frequency        DigestFrequency @default(DAILY)
+  enabled          Boolean         @default(true)
+  unsubscribeToken String          @unique @map("unsubscribe_token")
+  lastSentAt       DateTime?       @map("last_sent_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([enabled, frequency])
+  @@map("digest_preferences")
+}

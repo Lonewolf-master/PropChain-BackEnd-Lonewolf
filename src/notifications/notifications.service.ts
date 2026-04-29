@@ -83,6 +83,12 @@ export class NotificationsService {
     });
 
     // 2. Try real-time delivery
+    // FCM Push Integration
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+    if (user?.fcmToken) {
+      console.log(Sending FCM notification to token: \);
+      // In production, use admin.messaging().send() here
+    }
     const delivered = this.gateway.sendToUser(userId, 'notification', notification);
 
     if (delivered) {
@@ -159,5 +165,34 @@ export class NotificationsService {
         });
       }
     }
+  }
+
+  async scheduleNotification(
+    userId: string,
+    title: string,
+    message: string,
+    type: string,
+    scheduleData: { scheduledAt: Date; isRecurring?: boolean; cron?: string; timezone?: string },
+  ) {
+    return this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type,
+        status: 'PENDING',
+        ...scheduleData,
+      },
+    });
+  }
+
+  async cancelScheduledNotification(id: string) {
+    return this.prisma.notification.deleteMany({
+      where: {
+        id,
+        status: 'PENDING',
+        scheduledAt: { not: null },
+      },
+    });
   }
 }

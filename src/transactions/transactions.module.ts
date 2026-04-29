@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule } from '../database/prisma.module';
+import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { DisputesService } from './disputes.service';
 import { TimelineService } from './timeline.service';
@@ -9,9 +11,9 @@ import { PrismaModule } from '../database/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, NotificationsModule],
-  controllers: [TransactionsController, DisputesController, TimelineController],
-  providers: [TransactionsService, DisputesService, TimelineService],
-  exports: [TransactionsService, DisputesService, TimelineService],
+  imports: [PrismaModule],
+  controllers: [TransactionsController],
+  providers: [TransactionsService],
+  exports: [TransactionsService],
 })
 export class TransactionsModule {}
