@@ -1,6 +1,6 @@
 # PropChain - Blockchain-Powered Real Estate Platform
 
-A modern, scalable backend API for real estate transactions built with NestJS and PostgreSQL.
+A modern, scalable backend API for real estate transactions built with NestJS and PostgreSQL
 
 ## 🚀 Features
 
