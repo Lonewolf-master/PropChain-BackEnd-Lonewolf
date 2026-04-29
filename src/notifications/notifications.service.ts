@@ -1,13 +1,68 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
+import { EmailService } from '../email/email.service';
+import { SmsService } from './sms.service';
+import { Transaction, TransactionStatus, User } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private gateway: NotificationsGateway,
+    private emailService: EmailService,
+    private smsService: SmsService,
   ) {}
+
+  async handleTransactionUpdate(transactionId: string) {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        buyer: { include: { preferences: true } },
+        seller: { include: { preferences: true } },
+        property: true,
+      },
+    });
+
+    if (!transaction) return;
+
+    const parties = [
+      { user: transaction.buyer, role: 'Buyer' },
+      { user: transaction.seller, role: 'Seller' },
+    ];
+
+    for (const party of parties) {
+      const { user, role } = party;
+      const preferences = user.preferences;
+
+      const title = `Transaction ${transaction.status}`;
+      const message = `Your transaction for property "${transaction.property.title}" has been updated to ${transaction.status}.`;
+
+      // 1. In-App Notification
+      if (!preferences || preferences.inAppNotifications) {
+        await this.sendNotification(user.id, title, message, 'TRANSACTION_UPDATE', {
+          transactionId: transaction.id,
+          status: transaction.status,
+        });
+      }
+
+      // 2. Email Notification
+      if (preferences?.emailNotifications) {
+        await this.emailService.sendEmail({
+          to: user.email,
+          subject: `[PropChain] ${title}`,
+          html: `<p>${message}</p><p>View your dashboard for details.</p>`,
+          userId: user.id,
+          emailType: 'TRANSACTION_UPDATE',
+        });
+      }
+
+      // 3. SMS Notification
+      if (preferences?.smsNotifications && user.phone) {
+        await this.smsService.sendSms(user.phone, message);
+      }
+    }
+  }
 
   async sendNotification(
     userId: string,
