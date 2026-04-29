@@ -192,6 +192,7 @@ model User {
   initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
+  fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
