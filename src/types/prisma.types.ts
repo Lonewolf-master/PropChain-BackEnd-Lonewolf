@@ -112,6 +112,12 @@ export enum DisputeStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum MilestoneStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  DELAYED = 'DELAYED',
+}
+
 export namespace Prisma {
   export interface PropertyWhereInput extends Record<string, any> {}
   export interface PropertyOrderByWithRelationInput extends Record<string, any> {}

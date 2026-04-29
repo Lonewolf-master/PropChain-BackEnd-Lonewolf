@@ -134,6 +134,12 @@ enum DisputeStatus {
   CANCELLED
 }
 
+enum MilestoneStatus {
+  PENDING
+  COMPLETED
+  DELAYED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -412,6 +418,7 @@ model Transaction {
   seller      User         @relation("SellerTransactions", fields: [sellerId], references: [id])
   fraudAlerts FraudAlert[]
   disputes    Dispute[]
+  milestones  TransactionMilestone[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -744,6 +751,25 @@ model Dispute {
   @@index([initiatorId])
   @@index([status])
   @@map("disputes")
+}
+
+model TransactionMilestone {
+  id            String          @id @default(uuid())
+  transactionId String          @map("transaction_id")
+  title         String
+  description   String?         @db.Text
+  status        MilestoneStatus @default(PENDING)
+  expectedDate  DateTime        @map("expected_date")
+  actualDate    DateTime?       @map("actual_date")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@map("transaction_milestones")
 }
 
 model LinkClick {
