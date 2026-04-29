@@ -24,23 +24,15 @@ export class DisputesController {
   @Post(':id/evidence/:documentId')
   @ApiOperation({ summary: 'Attach evidence to a dispute' })
   @ApiResponse({ status: 200, description: 'Evidence attached successfully' })
-  addEvidence(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Param('documentId') documentId: string,
-  ) {
+  addEvidence(@Req() req: any, @Param('id') id: string, @Param('documentId') documentId: string) {
     return this.disputesService.addEvidence(id, req.user.id, documentId);
   }
 
   @Patch(':id/resolve')
-  @Roles(UserRole.ADMIN as any)
+  @Roles('ADMIN' as any)
   @ApiOperation({ summary: 'Resolve a dispute (Admin only)' })
   @ApiResponse({ status: 200, description: 'Dispute resolved successfully' })
-  resolve(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body() dto: ResolveDisputeDto,
-  ) {
+  resolve(@Req() req: any, @Param('id') id: string, @Body() dto: ResolveDisputeDto) {
     return this.disputesService.resolve(id, req.user.id, dto);
   }
 
