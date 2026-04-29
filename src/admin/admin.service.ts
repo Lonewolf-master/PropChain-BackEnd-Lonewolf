@@ -66,13 +66,8 @@ export class AdminService {
         this.prisma.property.count({ where: { status: PropertyStatus.ACTIVE } }),
       ]);
 
-    const [
-      completedTransactions,
-      pendingTransactions,
-      failedTransactions,
-      salesAggregate,
-      rentAggregate,
-    ] = await Promise.all([
+    const [completedTransactions, pendingTransactions, salesAggregate, rentAggregate] =
+      await Promise.all([
       this.prisma.transaction.count({ where: { status: TransactionStatus.COMPLETED } }),
       this.prisma.transaction.count({ where: { status: TransactionStatus.PENDING } }),
       this.prisma.transaction.aggregate({
