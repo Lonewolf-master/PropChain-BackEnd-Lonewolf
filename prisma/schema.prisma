@@ -198,6 +198,7 @@ model User {
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
   digestPreference        DigestPreference?
+  createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
 
 
   @@index([email])
@@ -405,10 +406,11 @@ model Transaction {
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  property    Property     @relation(fields: [propertyId], references: [id])
-  buyer       User         @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  seller      User         @relation("SellerTransactions", fields: [sellerId], references: [id])
-  fraudAlerts FraudAlert[]
+  property      Property                 @relation(fields: [propertyId], references: [id])
+  buyer         User                     @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller        User                     @relation("SellerTransactions", fields: [sellerId], references: [id])
+  fraudAlerts   FraudAlert[]
+  taxStrategies TransactionTaxStrategy[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -416,6 +418,30 @@ model Transaction {
   @@index([status])
   @@index([blockchainHash])
   @@map("transactions")
+}
+
+model TransactionTaxStrategy {
+  id                 String    @id @default(uuid())
+  transactionId      String    @map("transaction_id")
+  createdById        String?   @map("created_by_id")
+  strategyType       String    @map("strategy_type")
+  jurisdiction       String?
+  estimatedTaxRate   Decimal?  @map("estimated_tax_rate")
+  estimatedTaxImpact Decimal?  @map("estimated_tax_impact")
+  explanation        String    @db.Text
+  metadata           Json?
+  version            Int       @default(1)
+  informationalOnly  Boolean   @default(true) @map("informational_only")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("CreatedTransactionTaxStrategies", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([transactionId, updatedAt])
+  @@index([createdById])
+  @@index([strategyType])
+  @@map("transaction_tax_strategies")
 }
 
 // Document model
