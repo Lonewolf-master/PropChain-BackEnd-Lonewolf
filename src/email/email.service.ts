@@ -111,7 +111,10 @@ export class EmailService {
     }
   }
 
-  private async sendEmail(options: EmailOptions): Promise<void> {
+  async sendEmail(options: EmailOptions): Promise<void> {
+    const baseUrl = this.configService.get<string>('API_URL', 'http://localhost:3000/api');
+    let html = options.html;
+
     // 1. Check if user is blocked or has invalid email
     if (options.userId) {
       const user = await this.prisma.user.findUnique({ where: { id: options.userId } });
