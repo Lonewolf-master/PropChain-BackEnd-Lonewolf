@@ -197,6 +197,7 @@ model User {
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
   digestPreference        DigestPreference?
+  createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
 
 
   @@index([email])
@@ -434,7 +435,7 @@ model TransactionTaxStrategy {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  createdBy   User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?       @relation("CreatedTransactionTaxStrategies", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([transactionId, updatedAt])
   @@index([createdById])
