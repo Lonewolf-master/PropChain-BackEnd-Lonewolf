@@ -20,6 +20,10 @@ export class UpdateMilestoneDto {
 
   @IsOptional()
   @IsDateString()
+  expectedDate?: string;
+
+  @IsOptional()
+  @IsDateString()
   actualDate?: string;
 
   @IsOptional()
