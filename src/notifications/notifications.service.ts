@@ -103,10 +103,45 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(id: string) {
+  async markAsRead(id: string, userId: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification || notification.userId !== userId) {
+      throw new Error('Notification not found or unauthorized');
+    }
+
     return this.prisma.notification.update({
       where: { id },
       data: { status: 'READ', readAt: new Date() },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: { userId, status: { not: 'READ' } },
+      data: { status: 'READ', readAt: new Date() },
+    });
+  }
+
+  async getUnreadCount(userId: string) {
+    return this.prisma.notification.count({
+      where: { userId, status: { not: 'READ' } },
+    });
+  }
+
+  async deleteNotification(id: string, userId: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification || notification.userId !== userId) {
+      throw new Error('Notification not found or unauthorized');
+    }
+
+    return this.prisma.notification.delete({
+      where: { id },
     });
   }
 
