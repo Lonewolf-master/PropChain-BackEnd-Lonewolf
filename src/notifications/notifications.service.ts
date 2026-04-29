@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { EmailService } from '../email/email.service';
 import { SmsService } from './sms.service';
+import { UserPreferencesService } from '../users/user-preferences.service';
 import { Transaction, TransactionStatus, User } from '@prisma/client';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class NotificationsService {
     private gateway: NotificationsGateway,
     private emailService: EmailService,
     private smsService: SmsService,
+    private userPreferencesService: UserPreferencesService,
   ) {}
 
   async handleTransactionUpdate(transactionId: string) {
@@ -39,7 +41,10 @@ export class NotificationsService {
       const message = `Your transaction for property "${transaction.property.title}" has been updated to ${transaction.status}.`;
 
       // 1. In-App Notification
-      if (!preferences || preferences.inAppNotifications) {
+      const canInApp = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'inApp',
+      );
+      if (canInApp) {
         await this.sendNotification(user.id, title, message, 'TRANSACTION_UPDATE', {
           transactionId: transaction.id,
           status: transaction.status,
@@ -47,7 +52,10 @@ export class NotificationsService {
       }
 
       // 2. Email Notification
-      if (preferences?.emailNotifications) {
+      const canEmail = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'email',
+      );
+      if (canEmail) {
         await this.emailService.sendEmail({
           to: user.email,
           subject: `[PropChain] ${title}`,
@@ -58,7 +66,10 @@ export class NotificationsService {
       }
 
       // 3. SMS Notification
-      if (preferences?.smsNotifications && user.phone) {
+      const canSms = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'sms',
+      );
+      if (canSms && user.phone) {
         await this.smsService.sendSms(user.phone, message);
       }
     }
