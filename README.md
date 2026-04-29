@@ -253,4 +253,4 @@ This project is licensed under the MIT License.
 
 ## 👥 Support
 
-For support, email support@propchain.com or join our Slack channel.
+For support, email support@propchain.com or join our Slack channel
