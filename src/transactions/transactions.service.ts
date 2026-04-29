@@ -132,29 +132,46 @@ export class TransactionsService {
     });
   }
 
-  async updateTransactionStatus(transactionId: string, status: TransactionStatus) {
+  async updateStatus(id: string, status: TransactionStatus) {
     const transaction = await this.prisma.transaction.findUnique({
-      where: { id: transactionId },
+      where: { id },
     });
 
     if (!transaction) {
-      throw new NotFoundException(`Transaction ${transactionId} not found`);
+      throw new NotFoundException(`Transaction with ID ${id} not found`);
     }
 
-    if (!canTransitionTransactionStatus(transaction.status as TransactionStatus, status)) {
-      throw new BadRequestException(
-        `Transaction status cannot transition from ${transaction.status} to ${status}`,
-      );
-    }
-
-    if (transaction.status === status) {
-      return transaction;
-    }
-
-    return this.prisma.transaction.update({
-      where: { id: transactionId },
+    const updated = await this.prisma.transaction.update({
+      where: { id },
       data: { status },
     });
+
+    // Trigger notification
+    await this.notificationsService.handleTransactionUpdate(id);
+
+    return updated;
+  }
+
+  // Alias for AdminService compatibility
+  async updateTransactionStatus(id: string, status: TransactionStatus) {
+    return this.updateStatus(id, status);
+  }
+
+  async findOne(id: string) {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        buyer: true,
+        seller: true,
+        property: true,
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with ID ${id} not found`);
+    }
+
+    return transaction;
   }
 
   async listTaxStrategies(transactionId: string, actor: AuthUserPayload) {

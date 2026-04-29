@@ -162,7 +162,7 @@ Summary: ${payload.description}
     }
   }
 
-  private async sendEmail(options: EmailOptions): Promise<void> {
+  async sendEmail(options: EmailOptions): Promise<void> {
     const baseUrl = this.configService.get<string>('API_URL', 'http://localhost:3000/api');
     let html = options.html;
 

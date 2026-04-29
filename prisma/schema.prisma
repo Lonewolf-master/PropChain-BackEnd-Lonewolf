@@ -132,6 +132,19 @@ enum DigestFrequency {
 }
 
 
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PENDING
+  COMPLETED
+  DELAYED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -194,6 +207,8 @@ model User {
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
   fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
+  disputeInitiated        Dispute[]             @relation("DisputeInitiator")
+  disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
@@ -467,12 +482,14 @@ model Document {
   signedAt       DateTime?    @map("signed_at")
   signatureHash  String?      @map("signature_hash")
   auditTrail     Json         @default("[]") @map("audit_trail")
+  disputeId      String?      @map("dispute_id")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
   // Relations
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dispute  Dispute?  @relation(fields: [disputeId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
   @@index([userId])
@@ -490,9 +507,11 @@ model UserPreferences {
   language           String   @default("en")
   currency           String   @default("USD")
   timezone           String   @default("UTC")
-  emailNotifications Boolean  @default(true) @map("email_notifications")
-  smsNotifications   Boolean  @default(false) @map("sms_notifications")
-  propertyAlerts     Boolean  @default(true) @map("property_alerts")
+  emailNotifications  Boolean  @default(true) @map("email_notifications")
+  smsNotifications    Boolean  @default(false) @map("sms_notifications")
+  inAppNotifications  Boolean  @default(true) @map("in_app_notifications")
+  pushNotifications   Boolean  @default(false) @map("push_notifications")
+  propertyAlerts      Boolean  @default(true) @map("property_alerts")
   marketUpdates      Boolean  @default(true) @map("market_updates")
   theme              String   @default("light")
   createdAt          DateTime @default(now()) @map("created_at")
@@ -745,6 +764,50 @@ model Notification {
   @@index([createdAt])
   @@index([scheduledAt])
   @@map("notifications")
+}
+
+model Dispute {
+  id                String        @id @default(uuid())
+  transactionId     String        @map("transaction_id")
+  initiatorId       String        @map("initiator_id")
+  arbitratorId      String?       @map("arbitrator_id")
+  status            DisputeStatus @default(OPEN)
+  reason            String
+  description       String?       @db.Text
+  resolutionDetails String?       @map("resolution_details") @db.Text
+  resolvedAt        DateTime?     @map("resolved_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  initiator   User        @relation("DisputeInitiator", fields: [initiatorId], references: [id])
+  arbitrator  User?       @relation("DisputeArbitrator", fields: [arbitratorId], references: [id])
+  evidence    Document[]
+
+  @@index([transactionId])
+  @@index([initiatorId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model TransactionMilestone {
+  id            String          @id @default(uuid())
+  transactionId String          @map("transaction_id")
+  title         String
+  description   String?         @db.Text
+  status        MilestoneStatus @default(PENDING)
+  expectedDate  DateTime        @map("expected_date")
+  actualDate    DateTime?       @map("actual_date")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@map("transaction_milestones")
 }
 
 model LinkClick {

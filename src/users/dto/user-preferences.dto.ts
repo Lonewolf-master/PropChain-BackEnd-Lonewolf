@@ -27,6 +27,10 @@ export class CreateUserPreferencesDto {
 
   @IsOptional()
   @IsBoolean()
+  inAppNotifications?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   propertyAlerts?: boolean;
 
   @IsOptional()
@@ -66,6 +70,10 @@ export class UpdateUserPreferencesDto {
   @IsOptional()
   @IsBoolean()
   pushNotifications?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  inAppNotifications?: boolean;
 
   @IsOptional()
   @IsBoolean()
