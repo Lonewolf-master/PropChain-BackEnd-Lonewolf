@@ -2,6 +2,25 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TransactionHistoryQueryDto } from './dto/transactions.dto';
 import { Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
+import { TransactionStatus, TransactionType } from '../types/prisma.types';
+import {
+  canTransitionTransactionStatus,
+  DEFAULT_TRANSACTION_STATUS,
+} from './transaction-status.constants';
+
+export interface CreateTransactionInput {
+  propertyId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: Decimal | number | string;
+  type: TransactionType;
+  status?: TransactionStatus;
+  blockchainHash?: string | null;
+  contractAddress?: string | null;
+  notes?: string | null;
+}
 
 @Injectable()
 export class TransactionsService {
