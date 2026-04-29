@@ -132,6 +132,19 @@ enum DigestFrequency {
 }
 
 
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PENDING
+  COMPLETED
+  DELAYED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -192,11 +205,15 @@ model User {
   initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
+  fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
+  disputeInitiated        Dispute[]             @relation("DisputeInitiator")
+  disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
   digestPreference        DigestPreference?
+  createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
 
 
   @@index([email])
@@ -404,10 +421,11 @@ model Transaction {
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  property    Property     @relation(fields: [propertyId], references: [id])
-  buyer       User         @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  seller      User         @relation("SellerTransactions", fields: [sellerId], references: [id])
-  fraudAlerts FraudAlert[]
+  property      Property                 @relation(fields: [propertyId], references: [id])
+  buyer         User                     @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller        User                     @relation("SellerTransactions", fields: [sellerId], references: [id])
+  fraudAlerts   FraudAlert[]
+  taxStrategies TransactionTaxStrategy[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -415,6 +433,30 @@ model Transaction {
   @@index([status])
   @@index([blockchainHash])
   @@map("transactions")
+}
+
+model TransactionTaxStrategy {
+  id                 String    @id @default(uuid())
+  transactionId      String    @map("transaction_id")
+  createdById        String?   @map("created_by_id")
+  strategyType       String    @map("strategy_type")
+  jurisdiction       String?
+  estimatedTaxRate   Decimal?  @map("estimated_tax_rate")
+  estimatedTaxImpact Decimal?  @map("estimated_tax_impact")
+  explanation        String    @db.Text
+  metadata           Json?
+  version            Int       @default(1)
+  informationalOnly  Boolean   @default(true) @map("informational_only")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("CreatedTransactionTaxStrategies", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([transactionId, updatedAt])
+  @@index([createdById])
+  @@index([strategyType])
+  @@map("transaction_tax_strategies")
 }
 
 // Document model
@@ -440,12 +482,14 @@ model Document {
   signedAt       DateTime?    @map("signed_at")
   signatureHash  String?      @map("signature_hash")
   auditTrail     Json         @default("[]") @map("audit_trail")
+  disputeId      String?      @map("dispute_id")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
   // Relations
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dispute  Dispute?  @relation(fields: [disputeId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
   @@index([userId])
@@ -497,6 +541,7 @@ model ActivityLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([entityType, entityId])
   @@map("activity_logs")
 }
@@ -643,6 +688,7 @@ model SearchAnalytics {
   @@index([userId])
   @@index([queryId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([hasResults])
   @@index([converted])
   @@map("search_analytics")
@@ -706,13 +752,62 @@ model Notification {
   metadata  Json?
   createdAt DateTime           @default(now()) @map("created_at")
   readAt    DateTime?          @map("read_at")
+  scheduledAt DateTime?          @map("scheduled_at")
+  isRecurring Boolean            @default(false) @map("is_recurring")
+  cron        String?            @map("cron")
+  timezone    String             @default("UTC")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("notifications")
+}
+
+model Dispute {
+  id                String        @id @default(uuid())
+  transactionId     String        @map("transaction_id")
+  initiatorId       String        @map("initiator_id")
+  arbitratorId      String?       @map("arbitrator_id")
+  status            DisputeStatus @default(OPEN)
+  reason            String
+  description       String?       @db.Text
+  resolutionDetails String?       @map("resolution_details") @db.Text
+  resolvedAt        DateTime?     @map("resolved_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  initiator   User        @relation("DisputeInitiator", fields: [initiatorId], references: [id])
+  arbitrator  User?       @relation("DisputeArbitrator", fields: [arbitratorId], references: [id])
+  evidence    Document[]
+
+  @@index([transactionId])
+  @@index([initiatorId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model TransactionMilestone {
+  id            String          @id @default(uuid())
+  transactionId String          @map("transaction_id")
+  title         String
+  description   String?         @db.Text
+  status        MilestoneStatus @default(PENDING)
+  expectedDate  DateTime        @map("expected_date")
+  actualDate    DateTime?       @map("actual_date")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@map("transaction_milestones")
 }
 
 model LinkClick {
@@ -729,6 +824,7 @@ model LinkClick {
   @@index([url])
   @@index([userId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("link_clicks")
 }
 
@@ -747,6 +843,7 @@ model EmailEngagement {
   @@index([userId])
   @@index([trackingId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("email_engagements")
 }
 
