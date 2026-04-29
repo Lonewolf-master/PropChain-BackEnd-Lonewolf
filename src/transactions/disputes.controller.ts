@@ -33,7 +33,7 @@ export class DisputesController {
   }
 
   @Patch(':id/resolve')
-  @Roles(UserRole.ADMIN as UserRole)
+  @Roles(UserRole.ADMIN as any)
   @ApiOperation({ summary: 'Resolve a dispute (Admin only)' })
   @ApiResponse({ status: 200, description: 'Dispute resolved successfully' })
   resolve(
