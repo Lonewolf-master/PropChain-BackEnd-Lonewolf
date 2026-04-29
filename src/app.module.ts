@@ -25,6 +25,9 @@ import { SearchModule } from './search/search.module';
 import { BackupModule } from './backup/backup.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BullModule } from '@nestjs/bullmq';
+import { EmailModule } from './email/email.module';
+import { ConfigService } from '@nestjs/config';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -60,6 +63,16 @@ import { NotificationsModule } from './notifications/notifications.module';
     BackupModule,
     TrackingModule,
     NotificationsModule,
+    EmailModule,
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get('REDIS_HOST', 'localhost'),
+          port: configService.get('REDIS_PORT', 6379),
+        },
+      }),
+    }),
   ],
   controllers: [AppController],
 })
