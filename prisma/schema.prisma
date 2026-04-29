@@ -45,7 +45,6 @@ enum TransactionStatus {
   PENDING
   COMPLETED
   CANCELLED
-  FAILED
 }
 
 // Document types

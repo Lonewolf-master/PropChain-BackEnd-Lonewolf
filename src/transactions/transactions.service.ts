@@ -1,43 +1,59 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { TransactionStatus } from '@prisma/client';
+import { TransactionStatus, TransactionType } from '../types/prisma.types';
+import {
+  canTransitionTransactionStatus,
+  DEFAULT_TRANSACTION_STATUS,
+} from './transaction-status.constants';
+
+export interface CreateTransactionInput {
+  propertyId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: Decimal | number | string;
+  type: TransactionType;
+  status?: TransactionStatus;
+  blockchainHash?: string | null;
+  contractAddress?: string | null;
+  notes?: string | null;
+}
 
 @Injectable()
 export class TransactionsService {
-  constructor(
-    private prisma: PrismaService,
-    private notificationsService: NotificationsService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async updateStatus(id: string, status: TransactionStatus) {
+  async createTransaction(input: CreateTransactionInput) {
+    return this.prisma.transaction.create({
+      data: {
+        ...input,
+        status: input.status ?? DEFAULT_TRANSACTION_STATUS,
+      },
+    });
+  }
+
+  async updateTransactionStatus(transactionId: string, status: TransactionStatus) {
     const transaction = await this.prisma.transaction.findUnique({
-      where: { id },
+      where: { id: transactionId },
     });
 
     if (!transaction) {
-      throw new NotFoundException(`Transaction with ID ${id} not found`);
+      throw new NotFoundException(`Transaction ${transactionId} not found`);
     }
 
-    const updated = await this.prisma.transaction.update({
-      where: { id },
+    if (!canTransitionTransactionStatus(transaction.status as TransactionStatus, status)) {
+      throw new BadRequestException(
+        `Transaction status cannot transition from ${transaction.status} to ${status}`,
+      );
+    }
+
+    if (transaction.status === status) {
+      return transaction;
+    }
+
+    return this.prisma.transaction.update({
+      where: { id: transactionId },
       data: { status },
-    });
-
-    // Trigger notification
-    await this.notificationsService.handleTransactionUpdate(id);
-
-    return updated;
-  }
-
-  async findOne(id: string) {
-    return this.prisma.transaction.findUnique({
-      where: { id },
-      include: {
-        buyer: true,
-        seller: true,
-        property: true,
-      },
     });
   }
 }
