@@ -30,6 +30,11 @@ export class TransactionsService {
     return updated;
   }
 
+  // Alias for AdminService compatibility
+  async updateTransactionStatus(id: string, status: TransactionStatus) {
+    return this.updateStatus(id, status);
+  }
+
   async findOne(id: string) {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id },
