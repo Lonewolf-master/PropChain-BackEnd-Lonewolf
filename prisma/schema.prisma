@@ -128,6 +128,13 @@ enum BounceType {
 }
 
 
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -189,6 +196,8 @@ model User {
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
   notifications           Notification[]
+  disputeInitiated        Dispute[]             @relation("DisputeInitiator")
+  disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
@@ -403,6 +412,7 @@ model Transaction {
   buyer       User         @relation("BuyerTransactions", fields: [buyerId], references: [id])
   seller      User         @relation("SellerTransactions", fields: [sellerId], references: [id])
   fraudAlerts FraudAlert[]
+  disputes    Dispute[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -435,12 +445,14 @@ model Document {
   signedAt       DateTime?    @map("signed_at")
   signatureHash  String?      @map("signature_hash")
   auditTrail     Json         @default("[]") @map("audit_trail")
+  disputeId      String?      @map("dispute_id")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
   // Relations
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dispute  Dispute?  @relation(fields: [disputeId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
   @@index([userId])
@@ -708,6 +720,31 @@ model Notification {
   @@index([status])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model Dispute {
+  id                String        @id @default(uuid())
+  transactionId     String        @map("transaction_id")
+  initiatorId       String        @map("initiator_id")
+  arbitratorId      String?       @map("arbitrator_id")
+  status            DisputeStatus @default(OPEN)
+  reason            String
+  description       String?       @db.Text
+  resolutionDetails String?       @map("resolution_details") @db.Text
+  resolvedAt        DateTime?     @map("resolved_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  initiator   User        @relation("DisputeInitiator", fields: [initiatorId], references: [id])
+  arbitrator  User?       @relation("DisputeArbitrator", fields: [arbitratorId], references: [id])
+  evidence    Document[]
+
+  @@index([transactionId])
+  @@index([initiatorId])
+  @@index([status])
+  @@map("disputes")
 }
 
 model LinkClick {
