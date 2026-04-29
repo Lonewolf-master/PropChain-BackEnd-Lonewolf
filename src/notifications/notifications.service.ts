@@ -76,4 +76,33 @@ export class NotificationsService {
       }
     }
   }
+
+  async scheduleNotification(
+    userId: string,
+    title: string,
+    message: string,
+    type: string,
+    scheduleData: { scheduledAt: Date; isRecurring?: boolean; cron?: string; timezone?: string },
+  ) {
+    return this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type,
+        status: 'PENDING',
+        ...scheduleData,
+      },
+    });
+  }
+
+  async cancelScheduledNotification(id: string) {
+    return this.prisma.notification.deleteMany({
+      where: {
+        id,
+        status: 'PENDING',
+        scheduledAt: { not: null },
+      },
+    });
+  }
 }
