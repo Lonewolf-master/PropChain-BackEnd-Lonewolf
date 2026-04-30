@@ -134,10 +134,10 @@ export class EmailService {
         options.emailType,
         trackingId,
       );
-      
+
       const baseUrl = this.configService.get<string>('API_URL', 'http://localhost:3000/api');
       const pixelUrl = `${baseUrl}/track/open/${trackingId}.png`;
-      
+
       options.context = {
         ...options.context,
         trackingPixel: pixelUrl,
@@ -163,7 +163,7 @@ export class EmailService {
         removeOnComplete: true,
         removeOnFail: false,
       });
-      
+
       this.logger.log(`📧 Email to ${options.to} queued for subject: ${options.subject}`);
     } catch (error) {
       this.logger.error(`❌ Failed to queue email to ${options.to}: ${error.message}`);
