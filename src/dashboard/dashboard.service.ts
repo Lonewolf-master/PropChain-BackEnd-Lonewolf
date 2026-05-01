@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -45,14 +45,18 @@ export class DashboardService {
       },
     });
 
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     return {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
-      phone: user.phone,
+      phone: user.phone || undefined,
       role: user.role,
-      avatar: user.avatar,
+      avatar: user.avatar || undefined,
       isVerified: user.isVerified,
       createdAt: user.createdAt,
       memberSince: user.createdAt.toLocaleDateString('en-US', {
@@ -70,7 +74,7 @@ export class DashboardService {
     });
 
     const totalProperties = properties.length;
-    const activeListings = properties.filter((p) => p.status === 'ACTIVE').length;
+    const activeListings = properties.filter((p: any) => p.status === 'ACTIVE').length;
 
     // Get user's transactions (both as buyer and seller)
     const buyerTransactions = await this.prisma.transaction.findMany({
@@ -148,7 +152,8 @@ export class DashboardService {
     for (const transaction of recentTransactions) {
       const isBuyer = transaction.buyerId === userId;
       const role = isBuyer ? 'bought' : 'sold';
-      const type = transaction.status === 'COMPLETED' ? 'transaction_completed' : 'transaction_pending';
+      const type =
+        transaction.status === 'COMPLETED' ? 'transaction_completed' : 'transaction_pending';
 
       activities.push({
         id: transaction.id,
@@ -164,7 +169,10 @@ export class DashboardService {
     return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, limit);
   }
 
-  private async getRecommendations(userId: string, limit: number = 5): Promise<RecommendationItemDto[]> {
+  private async getRecommendations(
+    userId: string,
+    limit: number = 5,
+  ): Promise<RecommendationItemDto[]> {
     // Get user's owned properties to understand their market segment
     const userProperties = await this.prisma.property.findMany({
       where: { ownerId: userId },
@@ -182,7 +190,7 @@ export class DashboardService {
         take: limit,
       });
 
-      return recommendations.map((prop) => ({
+      return recommendations.map((prop: any) => ({
         id: prop.id,
         title: prop.title,
         address: prop.address,
@@ -190,8 +198,8 @@ export class DashboardService {
         state: prop.state,
         price: prop.price,
         propertyType: prop.propertyType,
-        bedrooms: prop.bedrooms,
-        bathrooms: prop.bathrooms,
+        bedrooms: prop.bedrooms ?? undefined,
+        bathrooms: prop.bathrooms ?? undefined,
         reason: 'Recently listed popular property',
       }));
     }
@@ -201,11 +209,11 @@ export class DashboardService {
       where: {
         status: 'ACTIVE',
         ownerId: { not: userId },
-        OR: userProperties.map((prop) => ({
+        OR: userProperties.map((prop: any) => ({
           AND: [
             { city: prop.city },
             { state: prop.state },
-            { price: { gte: prop.price.multiply(0.8), lte: prop.price.multiply(1.2) } },
+            { price: { gte: prop.price.times(0.8), lte: prop.price.times(1.2) } },
           ],
         })),
       },
@@ -213,7 +221,7 @@ export class DashboardService {
       take: limit,
     });
 
-    return similarProperties.map((prop) => ({
+    return similarProperties.map((prop: any) => ({
       id: prop.id,
       title: prop.title,
       address: prop.address,
@@ -221,8 +229,8 @@ export class DashboardService {
       state: prop.state,
       price: prop.price,
       propertyType: prop.propertyType,
-      bedrooms: prop.bedrooms,
-      bathrooms: prop.bathrooms,
+      bedrooms: prop.bedrooms ?? undefined,
+      bathrooms: prop.bathrooms ?? undefined,
       reason: `Similar to properties in ${prop.city}, ${prop.state}`,
     }));
   }

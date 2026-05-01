@@ -1,4 +1,36 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  MinLength,
+  IsIn,
+  IsObject,
+  IsInt,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { InputType, Field } from '@nestjs/graphql';
+
+export class UpdatePreferencesDto {
+  @IsOptional()
+  @IsIn(['email', 'sms', 'phone'])
+  preferredChannel?: string;
+
+  @IsOptional()
+  @IsString()
+  languagePreference?: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsObject()
+  contactHours?: {
+    start: string;
+    end: string;
+  };
+}
 
 export class CreateUserDto {
   @IsEmail()
@@ -17,28 +49,92 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsIn(['email', 'sms', 'phone'])
+  preferredChannel?: string;
+
+  @IsOptional()
+  @IsString()
+  languagePreference?: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsObject()
+  contactHours?: {
+    start: string;
+    end: string;
+  };
+
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }
 
+@InputType()
 export class UpdateUserDto {
+  @Field({ nullable: true })
   @IsOptional()
   @IsEmail()
   email?: string;
 
+  @Field({ nullable: true })
   @IsOptional()
   @IsString()
   firstName?: string;
 
+  @Field({ nullable: true })
   @IsOptional()
   @IsString()
   lastName?: string;
 
+  @Field({ nullable: true })
   @IsOptional()
   @IsString()
   phone?: string;
 
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsIn(['email', 'sms', 'phone'])
+  preferredChannel?: string;
+
+  @Field({ nullable: true })
   @IsOptional()
   @IsString()
-  avatar?: string;
+  languagePreference?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+}
+export class SearchUsersDto {
+  @IsOptional()
+  @IsString()
+  q?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 10;
 }
 
 export class UpdateUserProfileDto {
