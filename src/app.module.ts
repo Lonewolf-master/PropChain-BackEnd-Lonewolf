@@ -25,6 +25,7 @@ import { SearchModule } from './search/search.module';
 import { BackupModule } from './backup/backup.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TransactionsModule } from './transactions/transactions.module';
 import { EmailDigestModule } from './email-digest/email-digest.module';
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { EmailDigestModule } from './email-digest/email-digest.module';
     BackupModule,
     TrackingModule,
     NotificationsModule,
+    TransactionsModule,
     EmailDigestModule,
   ],
   controllers: [AppController],

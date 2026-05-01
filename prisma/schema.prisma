@@ -205,6 +205,7 @@ model User {
   initiatedBackups        DatabaseBackup[]         @relation("BackupInitiatedBy")
   restoredBackups         DatabaseBackup[]         @relation("BackupRestoredBy")
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
+  fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
   disputeInitiated        Dispute[]             @relation("DisputeInitiator")
   disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
@@ -212,6 +213,7 @@ model User {
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
   digestPreference        DigestPreference?
+  createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
 
 
   @@index([email])
@@ -419,12 +421,11 @@ model Transaction {
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  property    Property     @relation(fields: [propertyId], references: [id])
-  buyer       User         @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  seller      User         @relation("SellerTransactions", fields: [sellerId], references: [id])
-  fraudAlerts FraudAlert[]
-  disputes    Dispute[]
-  milestones  TransactionMilestone[]
+  property      Property                 @relation(fields: [propertyId], references: [id])
+  buyer         User                     @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller        User                     @relation("SellerTransactions", fields: [sellerId], references: [id])
+  fraudAlerts   FraudAlert[]
+  taxStrategies TransactionTaxStrategy[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -432,6 +433,30 @@ model Transaction {
   @@index([status])
   @@index([blockchainHash])
   @@map("transactions")
+}
+
+model TransactionTaxStrategy {
+  id                 String    @id @default(uuid())
+  transactionId      String    @map("transaction_id")
+  createdById        String?   @map("created_by_id")
+  strategyType       String    @map("strategy_type")
+  jurisdiction       String?
+  estimatedTaxRate   Decimal?  @map("estimated_tax_rate")
+  estimatedTaxImpact Decimal?  @map("estimated_tax_impact")
+  explanation        String    @db.Text
+  metadata           Json?
+  version            Int       @default(1)
+  informationalOnly  Boolean   @default(true) @map("informational_only")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("CreatedTransactionTaxStrategies", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([transactionId, updatedAt])
+  @@index([createdById])
+  @@index([strategyType])
+  @@map("transaction_tax_strategies")
 }
 
 // Document model
@@ -489,6 +514,13 @@ model UserPreferences {
   propertyAlerts      Boolean  @default(true) @map("property_alerts")
   marketUpdates      Boolean  @default(true) @map("market_updates")
   theme              String   @default("light")
+  // Notification preferences (#370)
+  notificationFrequency  String   @default("INSTANT") @map("notification_frequency") // INSTANT | HOURLY | DAILY | WEEKLY
+  notificationEventTypes String[] @default([]) @map("notification_event_types")       // e.g. ["TRANSACTION_UPDATE","PROPERTY_ALERT","MARKET_UPDATE","DISPUTE","SYSTEM"]
+  quietHoursEnabled      Boolean  @default(false) @map("quiet_hours_enabled")
+  quietHoursStart        String?  @map("quiet_hours_start")  // "HH:MM" in user timezone
+  quietHoursEnd          String?  @map("quiet_hours_end")    // "HH:MM" in user timezone
+  perEventSettings       Json?    @map("per_event_settings") // fine-grained per-event channel overrides
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -516,6 +548,7 @@ model ActivityLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([entityType, entityId])
   @@map("activity_logs")
 }
@@ -662,6 +695,7 @@ model SearchAnalytics {
   @@index([userId])
   @@index([queryId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@index([hasResults])
   @@index([converted])
   @@map("search_analytics")
@@ -725,12 +759,17 @@ model Notification {
   metadata  Json?
   createdAt DateTime           @default(now()) @map("created_at")
   readAt    DateTime?          @map("read_at")
+  scheduledAt DateTime?          @map("scheduled_at")
+  isRecurring Boolean            @default(false) @map("is_recurring")
+  cron        String?            @map("cron")
+  timezone    String             @default("UTC")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("notifications")
 }
 
@@ -792,6 +831,7 @@ model LinkClick {
   @@index([url])
   @@index([userId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("link_clicks")
 }
 
@@ -810,6 +850,7 @@ model EmailEngagement {
   @@index([userId])
   @@index([trackingId])
   @@index([createdAt])
+  @@index([scheduledAt])
   @@map("email_engagements")
 }
 

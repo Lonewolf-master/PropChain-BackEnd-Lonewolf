@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { EmailService } from '../email/email.service';
 import { SmsService } from './sms.service';
+import { UserPreferencesService } from '../users/user-preferences.service';
 import { Transaction, TransactionStatus, User } from '@prisma/client';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class NotificationsService {
     private gateway: NotificationsGateway,
     private emailService: EmailService,
     private smsService: SmsService,
+    private userPreferencesService: UserPreferencesService,
   ) {}
 
   async handleTransactionUpdate(transactionId: string) {
@@ -39,7 +41,10 @@ export class NotificationsService {
       const message = `Your transaction for property "${transaction.property.title}" has been updated to ${transaction.status}.`;
 
       // 1. In-App Notification
-      if (!preferences || preferences.inAppNotifications) {
+      const canInApp = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'inApp',
+      );
+      if (canInApp) {
         await this.sendNotification(user.id, title, message, 'TRANSACTION_UPDATE', {
           transactionId: transaction.id,
           status: transaction.status,
@@ -47,7 +52,10 @@ export class NotificationsService {
       }
 
       // 2. Email Notification
-      if (preferences?.emailNotifications) {
+      const canEmail = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'email',
+      );
+      if (canEmail) {
         await this.emailService.sendEmail({
           to: user.email,
           subject: `[PropChain] ${title}`,
@@ -58,7 +66,10 @@ export class NotificationsService {
       }
 
       // 3. SMS Notification
-      if (preferences?.smsNotifications && user.phone) {
+      const canSms = await this.userPreferencesService.shouldDeliverNotification(
+        user.id, 'TRANSACTION_UPDATE', 'sms',
+      );
+      if (canSms && user.phone) {
         await this.smsService.sendSms(user.phone, message);
       }
     }
@@ -83,6 +94,12 @@ export class NotificationsService {
     });
 
     // 2. Try real-time delivery
+    // FCM Push Integration
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+    if (user?.fcmToken) {
+      console.log(Sending FCM notification to token: \);
+      // In production, use admin.messaging().send() here
+    }
     const delivered = this.gateway.sendToUser(userId, 'notification', notification);
 
     if (delivered) {
@@ -103,10 +120,45 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(id: string) {
+  async markAsRead(id: string, userId: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification || notification.userId !== userId) {
+      throw new Error('Notification not found or unauthorized');
+    }
+
     return this.prisma.notification.update({
       where: { id },
       data: { status: 'READ', readAt: new Date() },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: { userId, status: { not: 'READ' } },
+      data: { status: 'READ', readAt: new Date() },
+    });
+  }
+
+  async getUnreadCount(userId: string) {
+    return this.prisma.notification.count({
+      where: { userId, status: { not: 'READ' } },
+    });
+  }
+
+  async deleteNotification(id: string, userId: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification || notification.userId !== userId) {
+      throw new Error('Notification not found or unauthorized');
+    }
+
+    return this.prisma.notification.delete({
+      where: { id },
     });
   }
 
@@ -124,5 +176,34 @@ export class NotificationsService {
         });
       }
     }
+  }
+
+  async scheduleNotification(
+    userId: string,
+    title: string,
+    message: string,
+    type: string,
+    scheduleData: { scheduledAt: Date; isRecurring?: boolean; cron?: string; timezone?: string },
+  ) {
+    return this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type,
+        status: 'PENDING',
+        ...scheduleData,
+      },
+    });
+  }
+
+  async cancelScheduledNotification(id: string) {
+    return this.prisma.notification.deleteMany({
+      where: {
+        id,
+        status: 'PENDING',
+        scheduledAt: { not: null },
+      },
+    });
   }
 }
