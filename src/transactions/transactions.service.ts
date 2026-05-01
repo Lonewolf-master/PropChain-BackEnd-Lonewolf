@@ -9,22 +9,84 @@ import {
   canTransitionTransactionStatus,
   DEFAULT_TRANSACTION_STATUS,
 } from './transaction-status.constants';
+import {
+  CreateTransactionTaxStrategyDto,
+  UpdateTransactionTaxStrategyDto,
+} from './dto/transaction.dto';
+import { TransactionSearchQueryDto } from './dto/transaction-search.dto';
 
 export interface CreateTransactionInput {
   propertyId: string;
   buyerId: string;
   sellerId: string;
   amount: Decimal | number | string;
-  type: TransactionType;
+  type?: TransactionType;
   status?: TransactionStatus;
   blockchainHash?: string | null;
   contractAddress?: string | null;
   notes?: string | null;
 }
 
+const TAX_STRATEGY_DISCLAIMER =
+  'Informational only. Tax strategy suggestions are non-binding and are not legal or tax advice.';
+
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  async createTransaction(input: CreateTransactionInput, actor?: AuthUserPayload) {
+    if (actor && actor.role !== UserRole.ADMIN && actor.sub !== input.buyerId) {
+      throw new ForbiddenException('You can only create transactions as the authenticated buyer');
+    }
+
+    const [property, buyer, seller] = await Promise.all([
+      this.prisma.property.findUnique({
+        where: { id: input.propertyId },
+        select: {
+          id: true,
+          title: true,
+          address: true,
+          ownerId: true,
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: input.buyerId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: input.sellerId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      }),
+    ]);
+
+    if (!property) {
+      throw new NotFoundException(`Property ${input.propertyId} not found`);
+    }
+
+    if (!buyer) {
+      throw new NotFoundException(`Buyer ${input.buyerId} not found`);
+    }
+
+    if (!seller) {
+      throw new NotFoundException(`Seller ${input.sellerId} not found`);
+    }
+
+    if (property.ownerId !== input.sellerId) {
+      throw new BadRequestException('Seller must match the property owner');
+    }
 
   async getTransactions(query: TransactionHistoryQueryDto, userId?: string) {
     const {

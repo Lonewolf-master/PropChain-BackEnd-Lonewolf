@@ -105,6 +105,19 @@ export enum FraudPattern {
   HIGH_VALUE_NEW_ACCOUNT_LISTING = 'HIGH_VALUE_NEW_ACCOUNT_LISTING',
 }
 
+export enum DisputeStatus {
+  OPEN = 'OPEN',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+  RESOLVED = 'RESOLVED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum MilestoneStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  DELAYED = 'DELAYED',
+}
+
 export namespace Prisma {
   export interface PropertyWhereInput extends Record<string, any> {}
   export interface PropertyOrderByWithRelationInput extends Record<string, any> {}

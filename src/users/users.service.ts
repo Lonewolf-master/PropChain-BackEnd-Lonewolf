@@ -102,6 +102,14 @@ export class UsersService implements OnModuleInit {
             passwordHash,
           },
         },
+        preferences: {
+          create: {
+            emailNotifications: true,
+            smsNotifications: false,
+            inAppNotifications: true,
+            pushNotifications: false,
+          },
+        },
       },
     });
 
