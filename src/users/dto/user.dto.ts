@@ -40,3 +40,17 @@ export class UpdateUserDto {
   @IsString()
   avatar?: string;
 }
+
+export class UpdateUserProfileDto {
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
