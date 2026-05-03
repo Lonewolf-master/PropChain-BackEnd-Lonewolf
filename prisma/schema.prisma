@@ -131,7 +131,6 @@ enum DigestFrequency {
   WEEKLY
 }
 
-
 enum DisputeStatus {
   OPEN
   UNDER_REVIEW
@@ -207,14 +206,14 @@ model User {
   emailStatus             EmailStatus              @default(ACTIVE) @map("email_status")
   fcmToken                String?                  @map("fcm_token")
   notifications           Notification[]
-  disputeInitiated        Dispute[]             @relation("DisputeInitiator")
-  disputeArbitrated       Dispute[]             @relation("DisputeArbitrator")
+  disputeInitiated        Dispute[]                @relation("DisputeInitiator")
+  disputeArbitrated       Dispute[]                @relation("DisputeArbitrator")
   linkClicks              LinkClick[]
   emailEngagements        EmailEngagement[]
   emailBounces            EmailBounce[]
   digestPreference        DigestPreference?
   createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
-
+  transactionHistory      TransactionHistory[]
 
   @@index([email])
   @@index([role])
@@ -225,23 +224,23 @@ model User {
 }
 
 model DatabaseBackup {
-  id                 String        @id @default(uuid())
-  filename           String        @unique
-  filePath           String        @map("file_path")
-  status             BackupStatus  @default(PENDING)
-  trigger            BackupTrigger
-  sizeBytes          BigInt?       @map("size_bytes")
-  checksum           String?
-  startedAt          DateTime      @default(now()) @map("started_at")
-  completedAt        DateTime?     @map("completed_at")
-  errorMessage       String?       @map("error_message") @db.Text
-  initiatedById      String?       @map("initiated_by_id")
-  restoreStatus      RestoreStatus @default(IDLE) @map("restore_status")
-  restoredAt         DateTime?     @map("restored_at")
-  restoreError       String?       @map("restore_error") @db.Text
-  restoredById       String?       @map("restored_by_id")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  filename      String        @unique
+  filePath      String        @map("file_path")
+  status        BackupStatus  @default(PENDING)
+  trigger       BackupTrigger
+  sizeBytes     BigInt?       @map("size_bytes")
+  checksum      String?
+  startedAt     DateTime      @default(now()) @map("started_at")
+  completedAt   DateTime?     @map("completed_at")
+  errorMessage  String?       @map("error_message") @db.Text
+  initiatedById String?       @map("initiated_by_id")
+  restoreStatus RestoreStatus @default(IDLE) @map("restore_status")
+  restoredAt    DateTime?     @map("restored_at")
+  restoreError  String?       @map("restore_error") @db.Text
+  restoredById  String?       @map("restored_by_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   initiatedBy User? @relation("BackupInitiatedBy", fields: [initiatedById], references: [id], onDelete: SetNull)
   restoredBy  User? @relation("BackupRestoredBy", fields: [restoredById], references: [id], onDelete: SetNull)
@@ -253,13 +252,13 @@ model DatabaseBackup {
 }
 
 model BackupScheduleConfig {
-  id             String   @id
-  enabled        Boolean  @default(false)
-  cronExpression String   @map("cron_expression")
-  retentionCount Int      @default(10) @map("retention_count")
+  id             String    @id
+  enabled        Boolean   @default(false)
+  cronExpression String    @map("cron_expression")
+  retentionCount Int       @default(10) @map("retention_count")
   lastRunAt      DateTime? @map("last_run_at")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("backup_schedule_configs")
 }
@@ -421,11 +420,14 @@ model Transaction {
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  property      Property                 @relation(fields: [propertyId], references: [id])
-  buyer         User                     @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  seller        User                     @relation("SellerTransactions", fields: [sellerId], references: [id])
-  fraudAlerts   FraudAlert[]
-  taxStrategies TransactionTaxStrategy[]
+  property              Property                 @relation(fields: [propertyId], references: [id])
+  buyer                 User                     @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller                User                     @relation("SellerTransactions", fields: [sellerId], references: [id])
+  fraudAlerts           FraudAlert[]
+  taxStrategies         TransactionTaxStrategy[]
+  disputes              Dispute[]
+  transactionMilestones TransactionMilestone[]
+  transactionHistory    TransactionHistory[]
 
   @@index([propertyId])
   @@index([buyerId])
@@ -436,19 +438,19 @@ model Transaction {
 }
 
 model TransactionTaxStrategy {
-  id                 String    @id @default(uuid())
-  transactionId      String    @map("transaction_id")
-  createdById        String?   @map("created_by_id")
-  strategyType       String    @map("strategy_type")
+  id                 String   @id @default(uuid())
+  transactionId      String   @map("transaction_id")
+  createdById        String?  @map("created_by_id")
+  strategyType       String   @map("strategy_type")
   jurisdiction       String?
-  estimatedTaxRate   Decimal?  @map("estimated_tax_rate")
-  estimatedTaxImpact Decimal?  @map("estimated_tax_impact")
-  explanation        String    @db.Text
+  estimatedTaxRate   Decimal? @map("estimated_tax_rate")
+  estimatedTaxImpact Decimal? @map("estimated_tax_impact")
+  explanation        String   @db.Text
   metadata           Json?
-  version            Int       @default(1)
-  informationalOnly  Boolean   @default(true) @map("informational_only")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  version            Int      @default(1)
+  informationalOnly  Boolean  @default(true) @map("informational_only")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   createdBy   User?       @relation("CreatedTransactionTaxStrategies", fields: [createdById], references: [id], onDelete: SetNull)
@@ -502,27 +504,27 @@ model Document {
 
 // User Preferences model
 model UserPreferences {
-  id                 String   @id @default(uuid())
-  userId             String   @unique @map("user_id")
-  language           String   @default("en")
-  currency           String   @default("USD")
-  timezone           String   @default("UTC")
-  emailNotifications  Boolean  @default(true) @map("email_notifications")
-  smsNotifications    Boolean  @default(false) @map("sms_notifications")
-  inAppNotifications  Boolean  @default(true) @map("in_app_notifications")
-  pushNotifications   Boolean  @default(false) @map("push_notifications")
-  propertyAlerts      Boolean  @default(true) @map("property_alerts")
-  marketUpdates      Boolean  @default(true) @map("market_updates")
-  theme              String   @default("light")
+  id                     String   @id @default(uuid())
+  userId                 String   @unique @map("user_id")
+  language               String   @default("en")
+  currency               String   @default("USD")
+  timezone               String   @default("UTC")
+  emailNotifications     Boolean  @default(true) @map("email_notifications")
+  smsNotifications       Boolean  @default(false) @map("sms_notifications")
+  inAppNotifications     Boolean  @default(true) @map("in_app_notifications")
+  pushNotifications      Boolean  @default(false) @map("push_notifications")
+  propertyAlerts         Boolean  @default(true) @map("property_alerts")
+  marketUpdates          Boolean  @default(true) @map("market_updates")
+  theme                  String   @default("light")
   // Notification preferences (#370)
   notificationFrequency  String   @default("INSTANT") @map("notification_frequency") // INSTANT | HOURLY | DAILY | WEEKLY
-  notificationEventTypes String[] @default([]) @map("notification_event_types")       // e.g. ["TRANSACTION_UPDATE","PROPERTY_ALERT","MARKET_UPDATE","DISPUTE","SYSTEM"]
+  notificationEventTypes String[] @default([]) @map("notification_event_types") // e.g. ["TRANSACTION_UPDATE","PROPERTY_ALERT","MARKET_UPDATE","DISPUTE","SYSTEM"]
   quietHoursEnabled      Boolean  @default(false) @map("quiet_hours_enabled")
-  quietHoursStart        String?  @map("quiet_hours_start")  // "HH:MM" in user timezone
-  quietHoursEnd          String?  @map("quiet_hours_end")    // "HH:MM" in user timezone
+  quietHoursStart        String?  @map("quiet_hours_start") // "HH:MM" in user timezone
+  quietHoursEnd          String?  @map("quiet_hours_end") // "HH:MM" in user timezone
   perEventSettings       Json?    @map("per_event_settings") // fine-grained per-event channel overrides
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -548,7 +550,6 @@ model ActivityLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
-  @@index([scheduledAt])
   @@index([entityType, entityId])
   @@map("activity_logs")
 }
@@ -659,14 +660,14 @@ model VerificationDocument {
 
 // Saved search filters
 model SavedFilter {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  name         String
-  filters      Json     // Store filter configuration as JSON
-  isQuickFilter Boolean @default(false) @map("is_quick_filter")
-  usageCount   Int      @default(0) @map("usage_count")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  name          String
+  filters       Json // Store filter configuration as JSON
+  isQuickFilter Boolean  @default(false) @map("is_quick_filter")
+  usageCount    Int      @default(0) @map("usage_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -677,25 +678,24 @@ model SavedFilter {
 
 // Search analytics
 model SearchAnalytics {
-  id          String   @id @default(uuid())
-  userId      String?  @map("user_id")
-  queryId     String   @unique @map("query_id")
-  query       String?
-  filters     Json?    // Store applied filters as JSON
-  resultsCount Int     @default(0) @map("results_count")
-  took        Int      @default(0) // Search time in milliseconds
-  hasResults  Boolean  @default(true) @map("has_results")
-  converted   Boolean  @default(false) @map("converted")
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  queryId      String   @unique @map("query_id")
+  query        String?
+  filters      Json? // Store applied filters as JSON
+  resultsCount Int      @default(0) @map("results_count")
+  took         Int      @default(0) // Search time in milliseconds
+  hasResults   Boolean  @default(true) @map("has_results")
+  converted    Boolean  @default(false) @map("converted")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([queryId])
   @@index([createdAt])
-  @@index([scheduledAt])
   @@index([hasResults])
   @@index([converted])
   @@map("search_analytics")
@@ -703,12 +703,12 @@ model SearchAnalytics {
 
 // Search history for autocomplete
 model SearchHistory {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  query     String
-  frequency Int      @default(1) // How many times this query has been searched
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  query        String
+  frequency    Int      @default(1) // How many times this query has been searched
   lastSearched DateTime @default(now()) @map("last_searched")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -721,10 +721,10 @@ model SearchHistory {
 
 // Popular searches (global)
 model PopularSearch {
-  id        String   @id @default(uuid())
-  query     String   @unique
-  frequency Int      @default(1)
-  trend     String   @default("stable") // up, down, stable
+  id          String   @id @default(uuid())
+  query       String   @unique
+  frequency   Int      @default(1)
+  trend       String   @default("stable") // up, down, stable
   lastUpdated DateTime @default(now()) @map("last_updated")
 
   @@index([frequency])
@@ -734,13 +734,13 @@ model PopularSearch {
 
 // Search suggestions cache
 model SearchSuggestion {
-  id        String   @id @default(uuid())
-  query     String
+  id         String   @id @default(uuid())
+  query      String
   suggestion String
-  type      String   // property, location, feature, recent, popular
-  score     Float    @default(0) // Relevance score
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  type       String // property, location, feature, recent, popular
+  score      Float    @default(0) // Relevance score
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([query])
   @@index([type])
@@ -750,15 +750,15 @@ model SearchSuggestion {
 }
 
 model Notification {
-  id        String             @id @default(uuid())
-  userId    String             @map("user_id")
-  title     String
-  message   String
-  type      String
-  status    NotificationStatus @default(PENDING)
-  metadata  Json?
-  createdAt DateTime           @default(now()) @map("created_at")
-  readAt    DateTime?          @map("read_at")
+  id          String             @id @default(uuid())
+  userId      String             @map("user_id")
+  title       String
+  message     String
+  type        String
+  status      NotificationStatus @default(PENDING)
+  metadata    Json?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  readAt      DateTime?          @map("read_at")
   scheduledAt DateTime?          @map("scheduled_at")
   isRecurring Boolean            @default(false) @map("is_recurring")
   cron        String?            @map("cron")
@@ -817,6 +817,23 @@ model TransactionMilestone {
   @@map("transaction_milestones")
 }
 
+model TransactionHistory {
+  id            String            @id @default(uuid())
+  transactionId String            @map("transaction_id")
+  status        TransactionStatus
+  actorId       String?           @map("actor_id")
+  notes         String?           @db.Text
+  metadata      Json?
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  actor       User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([transactionId])
+  @@index([createdAt])
+  @@map("transaction_history")
+}
+
 model LinkClick {
   id        String   @id @default(uuid())
   url       String
@@ -831,37 +848,35 @@ model LinkClick {
   @@index([url])
   @@index([userId])
   @@index([createdAt])
-  @@index([scheduledAt])
   @@map("link_clicks")
 }
 
 model EmailEngagement {
-  id          String    @id @default(uuid())
-  trackingId  String    @unique @map("tracking_id")
-  userId      String    @map("user_id")
-  emailType   String    @map("email_type")
-  openedAt    DateTime? @map("opened_at")
-  ipAddress   String?   @map("ip_address")
-  userAgent   String?   @map("user_agent")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  trackingId String    @unique @map("tracking_id")
+  userId     String    @map("user_id")
+  emailType  String    @map("email_type")
+  openedAt   DateTime? @map("opened_at")
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([trackingId])
   @@index([createdAt])
-  @@index([scheduledAt])
   @@map("email_engagements")
 }
 
 model EmailBounce {
-  id          String     @id @default(uuid())
-  userId      String     @map("user_id")
-  email       String
-  bounceType  BounceType @map("bounce_type")
-  reason      String?
-  rawEvent    Json?      @map("raw_event")
-  createdAt   DateTime   @default(now()) @map("created_at")
+  id         String     @id @default(uuid())
+  userId     String     @map("user_id")
+  email      String
+  bounceType BounceType @map("bounce_type")
+  reason     String?
+  rawEvent   Json?      @map("raw_event")
+  createdAt  DateTime   @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -870,7 +885,6 @@ model EmailBounce {
   @@index([bounceType])
   @@map("email_bounces")
 }
-
 
 model DigestPreference {
   id               String          @id @default(uuid())

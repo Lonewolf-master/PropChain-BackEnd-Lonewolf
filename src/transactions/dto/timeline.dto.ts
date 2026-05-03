@@ -15,6 +15,10 @@ export class CreateMilestoneDto {
 
 export class UpdateMilestoneDto {
   @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
   @IsEnum(MilestoneStatus)
   status?: MilestoneStatus;
 

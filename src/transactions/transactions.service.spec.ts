@@ -10,7 +10,13 @@ describe('TransactionsService', () => {
     transaction: {
       findMany: jest.Mock;
       count: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
     };
+    transactionHistory: {
+      create: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let notificationsService: {
     sendNotification: jest.Mock;
@@ -22,7 +28,13 @@ describe('TransactionsService', () => {
       transaction: {
         findMany: jest.fn().mockResolvedValue([{ id: 'tx-1' }]),
         count: jest.fn().mockResolvedValue(1),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
+      transactionHistory: {
+        create: jest.fn(),
+      },
+      $transaction: jest.fn(),
     };
 
     notificationsService = {
@@ -126,5 +138,32 @@ describe('TransactionsService', () => {
     );
 
     expect(prisma.transaction.findMany.mock.calls[0][0].where).toEqual({});
+  });
+
+  describe('updateStatus', () => {
+    it('updates status and logs history in a transaction', async () => {
+      const mockTx = { id: 'tx-123', status: TransactionStatus.PENDING };
+      prisma.transaction.findUnique.mockResolvedValue(mockTx);
+      prisma.transaction.update.mockResolvedValue({ ...mockTx, status: TransactionStatus.COMPLETED });
+      prisma.transactionHistory.create.mockResolvedValue({ id: 'hist-1' });
+      prisma.$transaction.mockImplementation(async (cb) => cb(prisma));
+
+      const result = await service.updateStatus('tx-123', TransactionStatus.COMPLETED, 'actor-1');
+
+      expect(prisma.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'tx-123' },
+        data: { status: TransactionStatus.COMPLETED },
+      });
+      expect(prisma.transactionHistory.create).toHaveBeenCalledWith({
+        data: {
+          transactionId: 'tx-123',
+          status: TransactionStatus.COMPLETED,
+          actorId: 'actor-1',
+          notes: 'Status updated from PENDING to COMPLETED',
+        },
+      });
+      expect(notificationsService.handleTransactionUpdate).toHaveBeenCalledWith('tx-123');
+      expect(result.status).toBe(TransactionStatus.COMPLETED);
+    });
   });
 });

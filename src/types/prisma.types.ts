@@ -47,6 +47,16 @@ export interface ApiKey {
   updatedAt: Date;
 }
 
+export interface TransactionHistory {
+  id: string;
+  transactionId: string;
+  status: string;
+  actorId: string | null;
+  notes: string | null;
+  metadata: any | null;
+  createdAt: Date;
+}
+
 export enum TokenType {
   ACCESS = 'ACCESS',
   REFRESH = 'REFRESH',

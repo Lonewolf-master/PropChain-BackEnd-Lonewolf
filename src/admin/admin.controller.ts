@@ -132,8 +132,9 @@ export class AdminController {
   updateTransactionStatus(
     @Param('id') transactionId: string,
     @Body() payload: UpdateTransactionStatusDto,
+    @CurrentUser() user: AuthUserPayload,
   ) {
-    return this.adminService.updateTransactionStatus(transactionId, payload);
+    return this.adminService.updateTransactionStatus(transactionId, payload, user.sub);
   }
 
   @Get('fraud/alerts')

@@ -17,11 +17,26 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @UseGuards(JwtAuthGuard)
+  @Get()
+  @ApiOperation({ summary: 'List all transactions for the current user' })
+  findAll(@Query() query: TransactionSearchQueryDto, @CurrentUser() user: AuthUserPayload) {
+    return this.transactionsService.search(query, user);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('search')
   @ApiOperation({ summary: 'Search transactions with filters and pagination' })
   @ApiResponse({ status: 200, description: 'Transaction search results returned successfully' })
   search(@Query() query: TransactionSearchQueryDto, @CurrentUser() user: AuthUserPayload) {
     return this.transactionsService.search(query, user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/history')
+  @ApiOperation({ summary: 'Get transaction history audit log' })
+  @ApiResponse({ status: 200, description: 'Transaction history returned successfully' })
+  getHistory(@Param('id') transactionId: string, @CurrentUser() user: AuthUserPayload) {
+    return this.transactionsService.getTransactionHistory(transactionId, user);
   }
 
   @UseGuards(JwtAuthGuard)

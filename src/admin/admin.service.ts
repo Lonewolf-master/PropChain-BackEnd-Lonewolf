@@ -324,8 +324,12 @@ export class AdminService {
     };
   }
 
-  async updateTransactionStatus(transactionId: string, payload: UpdateTransactionStatusDto) {
-    return this.transactionsService.updateTransactionStatus(transactionId, payload.status);
+  async updateTransactionStatus(
+    transactionId: string,
+    payload: UpdateTransactionStatusDto,
+    actorId?: string,
+  ) {
+    return this.transactionsService.updateTransactionStatus(transactionId, payload.status, actorId);
   }
 
   async listFraudAlerts(query: FraudAlertsQueryDto) {

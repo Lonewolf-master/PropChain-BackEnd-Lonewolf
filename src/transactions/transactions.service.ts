@@ -93,7 +93,7 @@ export class TransactionsService {
       throw new BadRequestException('Seller must match the property owner');
     }
 
-    return this.prisma.transaction.create({
+    const transaction = await this.prisma.transaction.create({
       data: {
         propertyId: input.propertyId,
         buyerId: input.buyerId,
@@ -131,9 +131,21 @@ export class TransactionsService {
         },
       },
     });
+
+    // Log initial status
+    await this.prisma.transactionHistory.create({
+      data: {
+        transactionId: transaction.id,
+        status: transaction.status,
+        actorId: actor?.sub,
+        notes: 'Transaction created',
+      },
+    });
+
+    return transaction;
   }
 
-  async updateStatus(id: string, status: TransactionStatus) {
+  async updateStatus(id: string, status: TransactionStatus, actorId?: string) {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id },
     });
@@ -142,9 +154,26 @@ export class TransactionsService {
       throw new NotFoundException(`Transaction with ID ${id} not found`);
     }
 
-    const updated = await this.prisma.transaction.update({
-      where: { id },
-      data: { status },
+    if (transaction.status === status) {
+      return transaction;
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.transaction.update({
+        where: { id },
+        data: { status },
+      });
+
+      await tx.transactionHistory.create({
+        data: {
+          transactionId: id,
+          status,
+          actorId,
+          notes: `Status updated from ${transaction.status} to ${status}`,
+        },
+      });
+
+      return u;
     });
 
     // Trigger notification
@@ -154,8 +183,43 @@ export class TransactionsService {
   }
 
   // Alias for AdminService compatibility
-  async updateTransactionStatus(id: string, status: TransactionStatus) {
-    return this.updateStatus(id, status);
+  async updateTransactionStatus(id: string, status: TransactionStatus, actorId?: string) {
+    return this.updateStatus(id, status, actorId);
+  }
+
+  async getTransactionHistory(transactionId: string, user: AuthUserPayload) {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction ${transactionId} not found`);
+    }
+
+    // RBAC: Only admin or parties to the transaction can see history
+    if (
+      user.role !== UserRole.ADMIN &&
+      user.sub !== transaction.buyerId &&
+      user.sub !== transaction.sellerId
+    ) {
+      throw new ForbiddenException('You do not have permission to view this transaction history');
+    }
+
+    return this.prisma.transactionHistory.findMany({
+      where: { transactionId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        actor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
   }
 
   async findOne(id: string) {
