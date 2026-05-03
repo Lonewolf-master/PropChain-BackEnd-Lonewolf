@@ -26,10 +26,16 @@ describe('TransactionsService', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    transactionHistory: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+    $transaction: jest.fn().mockImplementation(async (cb) => cb(mockPrismaService)),
   } as any;
 
   const mockNotificationsService = {
     sendNotification: jest.fn(),
+    handleTransactionUpdate: jest.fn(),
   };
 
   beforeEach(async () => {

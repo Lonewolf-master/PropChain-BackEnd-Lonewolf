@@ -158,6 +158,12 @@ export class TransactionsService {
       return transaction;
     }
 
+    if (!canTransitionTransactionStatus(transaction.status as TransactionStatus, status)) {
+      throw new BadRequestException(
+        `Cannot transition transaction ${id} from ${transaction.status} to ${status}`,
+      );
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const u = await tx.transaction.update({
         where: { id },
