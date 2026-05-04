@@ -62,10 +62,8 @@ export class TimelineService {
     // Check for delays
     const now = new Date();
     const updatedMilestones = milestones.map(m => {
-      if (m.status === MilestoneStatus.PENDING && new Date(m.expectedDate) < now) {
-        return { ...m, isOverdue: true };
-      }
-      return { ...m, isOverdue: false };
+      const isOverdue = m.status === MilestoneStatus.PENDING && new Date(m.expectedDate) < now;
+      return { ...m, isOverdue };
     });
 
     return {

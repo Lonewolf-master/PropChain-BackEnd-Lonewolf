@@ -181,6 +181,67 @@ describe('TransactionsService', () => {
       }),
       include: expect.any(Object),
     });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'seller-1',
+        firstName: 'Seller',
+        lastName: 'One',
+        email: 'seller@example.com',
+      });
+
+    await expect(
+      service.createTransaction(
+        {
+          propertyId: 'property-1',
+          buyerId: 'missing-buyer',
+          sellerId: 'seller-1',
+          amount: 1000,
+          type: TransactionType.SALE,
+        },
+        {
+          sub: 'missing-buyer',
+          email: 'buyer@example.com',
+          role: UserRole.USER,
+          type: 'access',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects invalid seller references', async () => {
+    mockPrismaService.property.findUnique.mockResolvedValue({
+      id: 'property-1',
+      title: 'Property',
+      address: '123 Main St',
+      ownerId: 'seller-1',
+    });
+    mockPrismaService.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'buyer-1',
+        firstName: 'Buyer',
+        lastName: 'One',
+        email: 'buyer@example.com',
+      })
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      service.createTransaction(
+        {
+          propertyId: 'property-1',
+          buyerId: 'buyer-1',
+          sellerId: 'missing-seller',
+          amount: 1000,
+          type: TransactionType.SALE,
+        },
+        {
+          sub: 'buyer-1',
+          email: 'buyer@example.com',
+          role: UserRole.USER,
+          type: 'access',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('rejects invalid property references', async () => {
