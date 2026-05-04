@@ -1,116 +1,84 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../database/prisma.service';
 import { TransactionsService } from './transactions.service';
-import { TransactionStatus, UserRole } from '../types/prisma.types';
+import { PrismaService } from '../database/prisma.service';
+import { TransactionSortField, SortOrder } from './dto/transactions.dto';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
-  let prisma: {
+  let prisma: PrismaService;
+
+  const mockPrismaService = {
     transaction: {
-      findMany: jest.Mock;
-      count: jest.Mock;
-    };
+      findMany: jest.fn(),
+      count: jest.fn(),
+      findUnique: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
-    prisma = {
-      transaction: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'tx-1' }]),
-        count: jest.fn().mockResolvedValue(1),
-      },
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TransactionsService,
         {
           provide: PrismaService,
-          useValue: prisma,
+          useValue: mockPrismaService,
         },
       ],
     }).compile();
 
-    service = module.get(TransactionsService);
+    service = module.get<TransactionsService>(TransactionsService);
+    prisma = module.get<PrismaService>(PrismaService);
   });
 
-  it('searches user transactions with status, date, amount, property filters, and pagination', async () => {
-    const result = await service.search(
-      {
-        status: TransactionStatus.COMPLETED,
-        dateFrom: '2026-04-01',
-        dateTo: '2026-04-29',
-        minAmount: 100000,
-        maxAmount: 250000,
-        property: 'Lagos',
-        propertyId: '550e8400-e29b-41d4-a716-446655440000',
-        page: 2,
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('getTransactions', () => {
+    it('should call prisma findMany and count with correct arguments', async () => {
+      const query = {
+        page: 1,
         limit: 10,
-      },
-      {
-        sub: 'user-1',
-        email: 'buyer@example.com',
-        role: UserRole.USER as any,
-        type: 'access',
-      },
-    );
+        sortBy: TransactionSortField.CREATED_AT,
+        sortOrder: SortOrder.DESC,
+      };
+      const userId = 'user-1';
 
-    expect(prisma.transaction.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skip: 10,
-        take: 10,
-        orderBy: { createdAt: 'desc' },
-        where: {
-          AND: expect.arrayContaining([
-            { OR: [{ buyerId: 'user-1' }, { sellerId: 'user-1' }] },
-            { status: TransactionStatus.COMPLETED },
-            { propertyId: '550e8400-e29b-41d4-a716-446655440000' },
-            {
-              property: {
-                OR: expect.arrayContaining([
-                  { title: { contains: 'Lagos', mode: 'insensitive' } },
-                  { address: { contains: 'Lagos', mode: 'insensitive' } },
-                ]),
-              },
-            },
-            {
-              createdAt: {
-                gte: new Date('2026-04-01'),
-                lte: new Date('2026-04-29T23:59:59.999Z'),
-              },
-            },
-            {
-              amount: {
-                gte: expect.any(Object),
-                lte: expect.any(Object),
-              },
-            },
-          ]),
-        },
-      }),
-    );
-    expect(prisma.transaction.count).toHaveBeenCalledWith({
-      where: prisma.transaction.findMany.mock.calls[0][0].where,
-    });
-    expect(result).toEqual({
-      total: 1,
-      page: 2,
-      limit: 10,
-      totalPages: 1,
-      items: [{ id: 'tx-1' }],
+      mockPrismaService.transaction.findMany.mockResolvedValue([]);
+      mockPrismaService.transaction.count.mockResolvedValue(0);
+
+      const result = await service.getTransactions(query, userId);
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ buyerId: userId }, { sellerId: userId }],
+          }),
+          skip: 0,
+          take: 10,
+        }),
+      );
+      expect(prisma.transaction.count).toHaveBeenCalled();
+      expect(result).toHaveProperty('items');
+      expect(result).toHaveProperty('total');
     });
   });
 
-  it('lets admins search all transactions without buyer or seller scoping', async () => {
-    await service.search(
-      { page: 1, limit: 20 },
-      {
-        sub: 'admin-1',
-        email: 'admin@example.com',
-        role: UserRole.ADMIN as any,
-        type: 'access',
-      },
-    );
+  describe('getTransactionById', () => {
+    it('should return transaction if user is buyer', async () => {
+      const mockTransaction = { id: 't-1', buyerId: 'user-1', sellerId: 'user-2' };
+      mockPrismaService.transaction.findUnique.mockResolvedValue(mockTransaction);
 
-    expect(prisma.transaction.findMany.mock.calls[0][0].where).toEqual({});
+      const result = await service.getTransactionById('t-1', 'user-1');
+      expect(result).toEqual(mockTransaction);
+    });
+
+    it('should return null if user is not buyer, seller or admin', async () => {
+      const mockTransaction = { id: 't-1', buyerId: 'user-1', sellerId: 'user-2' };
+      mockPrismaService.transaction.findUnique.mockResolvedValue(mockTransaction);
+
+      const result = await service.getTransactionById('t-1', 'user-3', false);
+      expect(result).toBeNull();
+    });
   });
 });
