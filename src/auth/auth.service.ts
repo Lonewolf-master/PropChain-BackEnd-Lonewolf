@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiKey, TokenType, User } from '../types/prisma.types';
+import { User as PrismaUser, ApiKey, TokenType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as jwt from 'jsonwebtoken';
@@ -22,6 +22,7 @@ import {
   RegisterDto,
   RequestPasswordResetDto,
   ResetPasswordDto,
+  UpdateApiKeyPermissionsDto,
   VerifyTwoFactorDto,
 } from './dto/auth.dto';
 import {
@@ -40,9 +41,11 @@ import {
   verifyTotpCode,
 } from './security.utils';
 import { AuthUserPayload } from './types/auth-user.type';
+import { GoogleProfile } from './strategies/google.strategy';
 
 import { LoginRateLimitService } from './login-rate-limit.service';
 import { UserRole } from '../types/prisma.types';
+import { FraudService } from '../fraud/fraud.service';
 
 type JwtPayload = {
   sub: string;
@@ -71,6 +74,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
     private readonly rateLimitService: LoginRateLimitService,
+    private readonly fraudService: FraudService,
   ) {
     this.jwtSecret = this.configService.get<string>('JWT_SECRET') ?? 'propchain-access-secret';
     this.jwtRefreshSecret =
@@ -139,6 +143,23 @@ export class AuthService {
       );
     }
 
+    const failedAttempts = await this.rateLimitService.getFailedAttemptsCount(data.email);
+    const captchaThreshold = parseInt(
+      this.configService.get<string>('CAPTCHA_THRESHOLD') ?? '3',
+      10,
+    );
+
+    if (failedAttempts >= captchaThreshold) {
+      if (!data.captchaToken) {
+        throw new UnauthorizedException('CAPTCHA verification required');
+      }
+      const isCaptchaValid = await this.verifyCaptcha(data.captchaToken);
+      if (!isCaptchaValid) {
+        // We might also record a failed attempt here if we wanted to
+        throw new UnauthorizedException('Invalid CAPTCHA');
+      }
+    }
+
     const user = await this.usersService.findByEmail(data.email);
     if (!user) {
       // Record failed attempt even if user doesn't exist (prevent enumeration)
@@ -156,7 +177,7 @@ export class AuthService {
       );
     }
 
-    const passwordMatches = await comparePassword(data.password, user.password);
+    const passwordMatches = await comparePassword(data.password, user.password ?? '');
     if (!passwordMatches) {
       // Record failed login attempt
       const shouldLock = await this.rateLimitService.recordFailedAttempt(
@@ -165,9 +186,16 @@ export class AuthService {
         userAgent,
       );
 
+      await this.fraudService.evaluateFailedLogin(data.email, ipAddress, userAgent);
+
       if (shouldLock) {
+        const lockoutDuration = 30;
+        await this.emailService.sendAccountLockedEmail(user.email, lockoutDuration).catch((err) => {
+          this.logger.error(`Failed to send account locked email to ${user.email}: ${err.message}`);
+        });
+
         throw new UnauthorizedException(
-          'Account locked due to too many failed login attempts. Please try again in 15 minutes.',
+          `Account locked due to too many failed login attempts. Please try again in ${lockoutDuration} minutes.`,
         );
       }
 
@@ -211,10 +239,25 @@ export class AuthService {
     // Record successful login
     await this.rateLimitService.recordSuccessfulAttempt(data.email, ipAddress, userAgent);
     await this.recordLoginHistory(user.id, ipAddress, userAgent);
+    await this.fraudService.evaluateSuccessfulLogin(user.id, ipAddress, userAgent);
 
-    const tokens = await this.issueTokenPair(user);
+    const refreshedUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+    });
+
+    if (!refreshedUser) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    if (refreshedUser.isBlocked) {
+      throw new UnauthorizedException(
+        'Your account has been blocked after a fraud review. Please contact support.',
+      );
+    }
+
+    const tokens = await this.issueTokenPair(refreshedUser, undefined, ipAddress, userAgent);
     return {
-      user: sanitizeUser(user),
+      user: sanitizeUser(refreshedUser),
       ...tokens,
     };
   }
@@ -235,6 +278,7 @@ export class AuthService {
       // TOKEN REUSE DETECTED! This is a potential attack
       // Mark the reuse and invalidate the entire token family
       await this.handleTokenReuse(blacklistedToken, payload.jti, ipAddress, userAgent);
+      await this.fraudService.handleTokenReuse(payload.sub, payload.jti, ipAddress, userAgent);
 
       this.logger.error(
         `Refresh token reuse detected for user ${payload.sub} (JTI: ${payload.jti}, Family: ${payload.family}). IP: ${ipAddress}`,
@@ -272,7 +316,7 @@ export class AuthService {
     });
 
     // Issue new token pair with SAME family ID
-    const tokens = await this.issueTokenPair(user, payload.family);
+    const tokens = await this.issueTokenPair(user, payload.family, ipAddress, userAgent);
 
     this.logger.log(
       `Token rotated for user ${user.id} (${user.email}). Family: ${payload.family}. IP: ${ipAddress}`,
@@ -623,7 +667,7 @@ export class AuthService {
 
     const currentPasswordMatches = await comparePassword(
       data.currentPassword,
-      existingUser.password,
+      existingUser.password ?? '',
     );
     if (!currentPasswordMatches) {
       throw new UnauthorizedException('Current password is incorrect');
@@ -749,7 +793,7 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const passwordMatches = await comparePassword(password, foundUser.password);
+    const passwordMatches = await comparePassword(password, foundUser.password ?? '');
     if (!passwordMatches) {
       throw new UnauthorizedException('Password is incorrect');
     }
@@ -770,12 +814,14 @@ export class AuthService {
 
   async createApiKey(user: AuthUserPayload, data: CreateApiKeyDto) {
     const apiKeyValue = this.generateApiKeyValue();
+    const permissions = this.normalizePermissions(data.permissions);
     const record = await this.prisma.apiKey.create({
       data: {
         userId: user.sub,
         name: data.name,
         keyPrefix: apiKeyValue.slice(0, 12),
         keyHash: createSha256(apiKeyValue),
+        permissions,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
       },
     });
@@ -816,6 +862,7 @@ export class AuthService {
 
     return this.createApiKey(user, {
       name: apiKey.name,
+      permissions: apiKey.permissions,
       expiresAt: apiKey.expiresAt?.toISOString(),
     });
   }
@@ -842,6 +889,102 @@ export class AuthService {
     return { message: 'API key revoked successfully' };
   }
 
+  async googleOAuthLogin(profile: GoogleProfile) {
+    let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
+
+    if (!user) {
+      // Try to link to an existing account by email
+      user = await this.prisma.user.findUnique({ where: { email: profile.email } });
+
+      if (user) {
+        // Link Google account to existing user
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId: profile.googleId,
+            avatar: user.avatar ?? profile.avatar,
+          },
+        });
+      } else {
+        // Create new user from Google profile
+        user = await this.prisma.user.create({
+          data: {
+            email: profile.email,
+            googleId: profile.googleId,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            avatar: profile.avatar,
+            isVerified: true,
+          },
+        });
+      }
+    } else {
+      // Sync profile fields
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          avatar: user.avatar ?? profile.avatar,
+        },
+      });
+    }
+
+    const tokens = await this.issueTokenPair(user);
+    return { user: sanitizeUser(user), ...tokens };
+  }
+
+  async updateApiKeyPermissions(
+    user: AuthUserPayload,
+    apiKeyId: string,
+    data: UpdateApiKeyPermissionsDto,
+  ) {
+    const apiKey = await this.prisma.apiKey.findFirst({
+      where: {
+        id: apiKeyId,
+        userId: user.sub,
+      },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException('API key not found');
+    }
+
+    const updated = await this.prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: {
+        permissions: this.normalizePermissions(data.permissions),
+      },
+    });
+
+    return this.toApiKeyResponse(updated);
+  }
+
+  async getApiKeyUsage(user: AuthUserPayload, apiKeyId: string) {
+    const apiKey = await this.prisma.apiKey.findFirst({
+      where: {
+        id: apiKeyId,
+        userId: user.sub,
+      },
+      select: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        usageCount: true,
+        lastUsedAt: true,
+        revokedAt: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException('API key not found');
+    }
+
+    return apiKey;
+  }
+
   async validateAccessToken(token: string): Promise<AuthUserPayload> {
     const payload = this.verifyToken(token, this.jwtSecret) as JwtPayload;
 
@@ -850,11 +993,33 @@ export class AuthService {
     }
 
     await this.ensureTokenNotBlacklisted(payload.jti);
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        email: true,
+        role: true,
+        lastActivityAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    const now = new Date();
+    if (!user.lastActivityAt || now.getTime() - user.lastActivityAt.getTime() > 5 * 60 * 1000) {
+      this.prisma.user
+        .update({
+          where: { id: payload.sub },
+          data: { lastActivityAt: now },
+        })
+        .catch((err) => this.logger.error(`Failed to update lastActivityAt: ${err.message}`));
+    }
 
     return {
       sub: payload.sub,
-      email: payload.email,
-      role: payload.role,
+      email: user.email,
+      role: user.role,
       type: 'access',
       jti: payload.jti,
     };
@@ -882,6 +1047,9 @@ export class AuthService {
       where: { id: apiKey.id },
       data: {
         lastUsedAt: new Date(),
+        usageCount: {
+          increment: 1,
+        },
       },
     });
 
@@ -891,11 +1059,12 @@ export class AuthService {
       role: apiKey.user.role as UserRole,
       type: 'api-key',
       apiKeyId: apiKey.id,
+      apiKeyPermissions: apiKey.permissions,
     };
   }
 
   private async issueTokenPair(
-    user: User,
+    user: PrismaUser,
     tokenFamily?: string,
     ipAddress?: string,
     userAgent?: string,
@@ -1018,12 +1187,22 @@ export class AuthService {
       id: apiKey.id,
       name: apiKey.name,
       keyPrefix: apiKey.keyPrefix,
+      permissions: apiKey.permissions,
+      usageCount: apiKey.usageCount,
       lastUsedAt: apiKey.lastUsedAt,
       expiresAt: apiKey.expiresAt,
       revokedAt: apiKey.revokedAt,
       createdAt: apiKey.createdAt,
       updatedAt: apiKey.updatedAt,
     };
+  }
+
+  private normalizePermissions(permissions?: string[]) {
+    if (!permissions || permissions.length === 0) {
+      return [];
+    }
+
+    return Array.from(new Set(permissions.map((permission) => permission.trim()).filter(Boolean)));
   }
 
   async requestPasswordReset(data: RequestPasswordResetDto): Promise<void> {
@@ -1179,5 +1358,41 @@ export class AuthService {
         userAgent,
       },
     });
+  }
+
+  private async verifyCaptcha(token: string): Promise<boolean> {
+    const secret = this.configService.get<string>('RECAPTCHA_SECRET');
+    if (!secret) {
+      this.logger.warn('RECAPTCHA_SECRET is not configured, skipping CAPTCHA verification');
+      return true; // Bypass if not configured in dev
+    }
+
+    try {
+      const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `secret=${secret}&response=${token}`,
+      });
+
+      const data = (await response.json()) as any;
+
+      // reCAPTCHA v3 returns a score between 0.0 and 1.0. Typically, 0.5 is a good threshold.
+      if (data.success && data.score !== undefined && data.score >= 0.5) {
+        return true;
+      }
+
+      if (data.success && data.score === undefined) {
+        // v2 fallback
+        return true;
+      }
+
+      this.logger.warn(`CAPTCHA verification failed: ${JSON.stringify(data['error-codes'])}`);
+      return false;
+    } catch (error) {
+      this.logger.error(`Error verifying CAPTCHA: ${error.message}`);
+      return false;
+    }
   }
 }
