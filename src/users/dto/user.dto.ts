@@ -136,3 +136,17 @@ export class SearchUsersDto {
   @Min(1)
   limit?: number = 10;
 }
+
+export class UpdateUserProfileDto {
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
