@@ -1,17 +1,12 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../database/prisma.module';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
-import { DisputesService } from './disputes.service';
-import { TimelineService } from './timeline.service';
-import { DisputesController } from './disputes.controller';
-import { TimelineController } from './timeline.controller';
+import { TransactionsController } from './transactions.controller';
+import { PrismaModule } from '../database/prisma.module';
 
 @Module({
-  imports: [PrismaModule, NotificationsModule],
-  controllers: [TransactionsController, DisputesController, TimelineController],
-  providers: [TransactionsService, DisputesService, TimelineService],
+  imports: [PrismaModule],
+  providers: [TransactionsService],
+  controllers: [TransactionsController],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

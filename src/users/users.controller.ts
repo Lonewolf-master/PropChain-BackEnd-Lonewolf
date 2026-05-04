@@ -1,3 +1,7 @@
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { CreateUserDto, UpdateUserDto, UpdateUserProfileDto } from './dto/user.dto';
+import { DeactivateAccountDto, ReactivateAccountDto } from './dto/deactivation.dto';
 import {
   Body,
   Controller,
@@ -94,6 +98,23 @@ export class UsersController {
     return this.usersService.remove(id);
   }
 
+  // User profile management
+  @UseGuards(JwtAuthGuard)
+  @Get('me/profile')
+  getProfile(@CurrentUser() user: AuthUserPayload) {
+    return this.usersService.findOne(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('me/profile')
+  updateProfile(
+    @CurrentUser() user: AuthUserPayload,
+    @Body() updateProfileDto: UpdateUserProfileDto,
+  ) {
+    return this.usersService.update(user.sub, updateProfileDto);
+  }
+
+  // User self-service deactivation
   @UseGuards(JwtAuthGuard)
   @Post(':id/export')
   async exportData(@Param('id') id: string, @CurrentUser() user: AuthUserPayload) {
